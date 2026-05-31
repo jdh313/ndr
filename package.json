@@ -1,0 +1,29 @@
+{
+  "name": "ndr",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Capture and resolution tooling for nested decision records.",
+  "bin": {
+    "ndr": "./src/cli/bin.ts"
+  },
+  "type": "module",
+  "scripts": {
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "commander": "^15.0.0",
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14",
+    "oxfmt": "^0.53.0",
+    "oxlint": "^1.68.0",
+    "typescript": "^6.0.3"
+  }
+}
