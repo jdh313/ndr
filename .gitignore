@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Bun
+.bun/
+
+# TypeScript
+*.tsbuildinfo
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor swap/undo files (Neovim, Vim)
+*.swp
+*.swo
+*~
+.*.swp
+.*.swo
+
+# Zed
+.zed/
+
+# Environment & secrets
+.env
+.env.local
+
+# Logs
+*.log
+
+# Babysitter
+.a5c/
