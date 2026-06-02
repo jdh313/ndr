@@ -2,6 +2,8 @@ import { z } from "zod";
 
 const Wikilink = z.string();
 
+// Atom ids must be quoted 4-digit zero-padded strings. An unquoted `id: 0128`
+// parses as the number 128 and is rejected — atom files must quote the id.
 const AtomIdString = z
   .string()
   .regex(/^\d{4}$/, "id must be a 4-digit zero-padded string");
