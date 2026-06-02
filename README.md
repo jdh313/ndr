@@ -6,8 +6,9 @@ See [CONTEXT.md](./CONTEXT.md) for the domain language and intent of the project
 
 ## Status
 
-Library surface only — no CLI subcommands yet. `ndr resolve` and `ndr capture`
-land in follow-up tickets.
+First CLI slice landed: `ndr resolve <atom-id>` walks supersession to the head
+and prints a structured brief. Slug + topic grains, `ndr search`, and `ndr capture`
+follow in JUN-173 and beyond.
 
 The library exports:
 
@@ -16,6 +17,21 @@ The library exports:
 - `MarkdownLedgerAdapter` — first concrete adapter, reads/writes a directory
   of `<id>-<kebab-title>.md` files. Parse pipeline is fence split → eemeli/yaml
   → Zod; see `ndr:0134`.
+
+## Usage
+
+```sh
+# Resolve an atom id against the default ledger (~/Loose Ends/Decisions/)
+ndr resolve 0102
+
+# Drift signal — seed atom 0070 was superseded; output names head 0102
+ndr resolve 0070
+
+# Point at a different ledger directory
+ndr resolve 0049 --ledger ./test/fixtures/ledger
+```
+
+Brief shape, drift placement, and basename sourcing are pinned by `ndr:0136`.
 
 ## Layout
 
