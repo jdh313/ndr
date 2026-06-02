@@ -10,7 +10,7 @@ import {
   type AtomId,
   type Ledger,
 } from "../../domain/index.ts";
-import type { ReadPort } from "../../ports/read.ts";
+import type { CurrentFilter, ReadPort } from "../../ports/read.ts";
 import type { WritePort } from "../../ports/write.ts";
 import { joinFrontmatter, splitFrontmatter } from "./fence.ts";
 import { parseFrontmatterYaml, stringifyFrontmatter } from "./yaml.ts";
@@ -72,14 +72,29 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort {
     return chain;
   }
 
-  async searchByTopic(area: string, topic: string): Promise<Atom[]> {
+  async findBySlug(slug: string): Promise<Atom | null> {
+    const target = normalizeSlug(slug);
     const atoms = await this.readAllAtoms();
-    return atoms.filter(
-      (a) =>
-        a.frontmatter.area === area &&
-        a.frontmatter.topic === topic &&
-        a.frontmatter.status === "current",
-    );
+    const match =
+      atoms.find((a) => a.frontmatter.status === "current" && hasAlias(a, target)) ??
+      atoms.find((a) => hasAlias(a, target));
+    if (match === undefined) return null;
+    // Walk to the head so a slug always resolves current, even if a ledger
+    // bug left the alias on a superseded atom instead of its successor.
+    const chain = await this.walkLineage(asAtomId(match.frontmatter.id));
+    return chain[chain.length - 1]!;
+  }
+
+  async listCurrent(filter: CurrentFilter = {}): Promise<Atom[]> {
+    const atoms = await this.readAllAtoms();
+    return atoms
+      .filter(
+        (a) =>
+          a.frontmatter.status === "current" &&
+          (filter.area === undefined || a.frontmatter.area === filter.area) &&
+          (filter.topic === undefined || a.frontmatter.topic === filter.topic),
+      )
+      .sort((a, b) => a.frontmatter.id.localeCompare(b.frontmatter.id));
   }
 
   async searchFreeText(query: string): Promise<Atom[]> {
@@ -131,11 +146,25 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort {
     return { frontmatter: result.data, body };
   }
 
+  // Bulk read for the corpus-wide verbs (search, current, slug lookup). A single
+  // malformed atom must not abort the whole command — skip it with a warning and
+  // keep going. Targeted reads (getAtom / resolve <id>) still throw, so a direct
+  // lookup of a bad atom surfaces the validation error.
   private async readAllAtoms(): Promise<Atom[]> {
     const entries = await this.listMarkdownFiles();
     const atoms: Atom[] = [];
     for (const name of entries) {
-      atoms.push(await this.readAtomFile(path.join(this.ledger, name)));
+      const file = path.join(this.ledger, name);
+      try {
+        atoms.push(await this.readAtomFile(file));
+      } catch (err) {
+        if (err instanceof AtomValidationError) {
+          const detail = err.issues.map((i) => `${i.path}: ${i.message}`).join("; ");
+          console.warn(`ndr: skipping malformed atom ${name} (${detail})`);
+          continue;
+        }
+        throw err;
+      }
     }
     return atoms;
   }
@@ -163,6 +192,17 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort {
     }
     return String(max + 1).padStart(4, "0");
   }
+}
+
+// Slugs are stored in `aliases:` with an `ndr-` namespace prefix (ndr:0050),
+// but referenced without it (`ndr:#monorepo-shape`, ndr:0049). Normalize the
+// prefix away on both sides so either form matches.
+function normalizeSlug(value: string): string {
+  return value.toLowerCase().replace(/^ndr-/, "");
+}
+
+function hasAlias(atom: Atom, normalizedTarget: string): boolean {
+  return atom.frontmatter.aliases.some((alias) => normalizeSlug(alias) === normalizedTarget);
 }
 
 function extractAtomIdFromWikilink(link: string): AtomId | null {

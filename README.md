@@ -6,9 +6,11 @@ See [CONTEXT.md](./CONTEXT.md) for the domain language and intent of the project
 
 ## Status
 
-First CLI slice landed: `ndr resolve <atom-id>` walks supersession to the head
-and prints a structured brief. Slug + topic grains, `ndr search`, and `ndr capture`
-follow in JUN-173 and beyond.
+The read API is complete: `ndr resolve` handles all three reference grains
+(atom-id, `#slug`, `area/topic`), and `ndr search`, `ndr lineage`, and
+`ndr current` round out the read verbs. Corpus-wide verbs skip a malformed atom
+with a warning rather than aborting; targeted `resolve <id>` still throws.
+`ndr capture` (the write verb) follows in a later slice.
 
 The library exports:
 
@@ -29,6 +31,22 @@ ndr resolve 0070
 
 # Point at a different ledger directory
 ndr resolve 0049 --ledger ./test/fixtures/ledger
+
+# Slug grain — resolve a minted alias to its current head (no drift)
+ndr resolve '#oxc-stack' --ledger ./test/fixtures/ledger
+
+# Topic grain — list all current heads in an area/topic
+ndr resolve substrate/substrate
+
+# Free-text search across atom title + body
+ndr search okta
+
+# Walk a supersession chain explicitly
+ndr lineage 0070
+
+# List current atoms, optionally filtered; --verbose expands to full briefs
+ndr current --area tooling
+ndr current --area tooling --topic lint-format --verbose
 ```
 
 Brief shape, drift placement, and basename sourcing are pinned by `ndr:0136`.

@@ -27,9 +27,11 @@ describe("FrontmatterSchema", () => {
     }
   });
 
-  test("rejects unquoted integer id (no coerce guard)", () => {
+  test("rejects an unquoted integer id (atom files must quote the id)", () => {
+    // YAML parses `id: 0128` as the number 128; the schema must reject it so
+    // the atom file is fixed (quoted) rather than silently mis-parsed.
     const result = FrontmatterSchema.safeParse({
-      id: 42,
+      id: 128,
       title: "x",
       status: "current",
       decision_date: "2026-01-01",

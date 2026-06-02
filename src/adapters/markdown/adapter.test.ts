@@ -29,8 +29,8 @@ describe("MarkdownLedgerAdapter against fixture ledger", () => {
     );
   });
 
-  test("searchByTopic returns matching current atoms", async () => {
-    const hits = await adapter.searchByTopic("tooling", "referencing");
+  test("listCurrent with area+topic filter returns only matching current atoms", async () => {
+    const hits = await adapter.listCurrent({ area: "tooling", topic: "referencing" });
     expect(hits.length).toBeGreaterThanOrEqual(1);
     for (const a of hits) {
       expect(a.frontmatter.area).toBe("tooling");
@@ -39,9 +39,51 @@ describe("MarkdownLedgerAdapter against fixture ledger", () => {
     }
   });
 
+  test("listCurrent with area-only filter spans topics within the area", async () => {
+    const hits = await adapter.listCurrent({ area: "tooling" });
+    const topics = new Set(hits.map((a) => a.frontmatter.topic));
+    expect(topics.size).toBeGreaterThan(1);
+    for (const a of hits) {
+      expect(a.frontmatter.area).toBe("tooling");
+      expect(a.frontmatter.status).toBe("current");
+    }
+  });
+
+  test("listCurrent with no filter excludes superseded atoms and sorts by id", async () => {
+    const hits = await adapter.listCurrent();
+    expect(hits.every((a) => a.frontmatter.status === "current")).toBe(true);
+    // 0070 is superseded by 0102 in the fixture ledger.
+    expect(hits.map((a) => a.frontmatter.id)).not.toContain("0070");
+    const ids = hits.map((a) => a.frontmatter.id);
+    expect([...ids].sort()).toEqual(ids);
+  });
+
+  test("listCurrent with an unknown area returns empty", async () => {
+    const hits = await adapter.listCurrent({ area: "nonexistent" });
+    expect(hits).toEqual([]);
+  });
+
+  test("findBySlug resolves a minted alias to its atom (prefix-tolerant)", async () => {
+    const bare = await adapter.findBySlug("oxc-stack");
+    expect(bare?.frontmatter.id).toBe("0132");
+    expect(bare?.frontmatter.status).toBe("current");
+    // The stored `ndr-` prefix form resolves to the same atom.
+    const prefixed = await adapter.findBySlug("ndr-oxc-stack");
+    expect(prefixed?.frontmatter.id).toBe("0132");
+  });
+
+  test("findBySlug returns null for an unminted slug", async () => {
+    expect(await adapter.findBySlug("no-such-slug")).toBeNull();
+  });
+
   test("searchFreeText finds matches in body/title", async () => {
     const hits = await adapter.searchFreeText("supersession");
     expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("searchFreeText returns empty for a query with no matches", async () => {
+    const hits = await adapter.searchFreeText("zzz-no-match-zzz");
+    expect(hits).toEqual([]);
   });
 });
 
@@ -128,6 +170,47 @@ describe("MarkdownLedgerAdapter captureAtom", () => {
         body: "\nbody\n",
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe("MarkdownLedgerAdapter bulk-read tolerance", () => {
+  let tmp: string;
+
+  beforeEach(async () => {
+    tmp = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-ledger-"));
+    // A valid current atom...
+    await fs.writeFile(
+      path.join(tmp, "0001-good.md"),
+      '---\nid: "0001"\ntitle: Good\nstatus: current\ndecision_date: 2026-01-01\nproject: "[[X]]"\nsupersedes: []\narea: tooling\ntopic: framework\nreversibility: easy\n---\nbody mentions widgets\n',
+      "utf8",
+    );
+    // ...alongside a genuinely-malformed one (invalid status enum).
+    await fs.writeFile(
+      path.join(tmp, "0002-bad.md"),
+      "---\nid: \"0002\"\ntitle: Bad\nstatus: bogus\ndecision_date: 2026-01-01\nproject: \"[[X]]\"\nsupersedes: []\narea: tooling\ntopic: framework\nreversibility: easy\n---\nbody\n",
+      "utf8",
+    );
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmp, { recursive: true, force: true });
+  });
+
+  test("listCurrent skips the malformed atom and returns the valid one", async () => {
+    const adapter = new MarkdownLedgerAdapter(tmp);
+    const hits = await adapter.listCurrent();
+    expect(hits.map((a) => a.frontmatter.id)).toEqual(["0001"]);
+  });
+
+  test("searchFreeText skips the malformed atom", async () => {
+    const adapter = new MarkdownLedgerAdapter(tmp);
+    const hits = await adapter.searchFreeText("widgets");
+    expect(hits.map((a) => a.frontmatter.id)).toEqual(["0001"]);
+  });
+
+  test("targeted getAtom on the malformed atom still throws", async () => {
+    const adapter = new MarkdownLedgerAdapter(tmp);
+    await expect(adapter.getAtom(asAtomId("0002"))).rejects.toBeInstanceOf(AtomValidationError);
   });
 });
 

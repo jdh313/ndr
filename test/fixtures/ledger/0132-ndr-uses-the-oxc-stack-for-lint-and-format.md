@@ -3,7 +3,8 @@ id: '0132'
 title: ndr uses the Oxc stack for lint and format
 status: current
 decision_date: '2026-06-01'
-aliases: []
+aliases:
+- ndr-oxc-stack
 project: '[[ndr]]'
 derived_from:
 - "[[JUN-170 \u2014 Scaffold repo: bun init, deps, lint/format]]"
