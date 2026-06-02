@@ -50,6 +50,11 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort {
     return await this.readAtomFile(file);
   }
 
+  async getAtomFilename(id: AtomId): Promise<string | null> {
+    const file = await this.findFileForId(id);
+    return file ? path.basename(file) : null;
+  }
+
   async walkLineage(id: AtomId): Promise<Atom[]> {
     const chain: Atom[] = [];
     const seen = new Set<string>();
@@ -82,8 +87,7 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort {
     const atoms = await this.readAllAtoms();
     return atoms.filter(
       (a) =>
-        a.body.toLowerCase().includes(needle) ||
-        a.frontmatter.title.toLowerCase().includes(needle),
+        a.body.toLowerCase().includes(needle) || a.frontmatter.title.toLowerCase().includes(needle),
     );
   }
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
 import { run } from "./index.ts";
 
-run(process.argv);
+const code = await run(process.argv);
+process.exit(code);
