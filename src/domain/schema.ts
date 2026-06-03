@@ -2,15 +2,17 @@ import { z } from "zod";
 
 const Wikilink = z.string();
 
-// Atom ids must be quoted 4-digit zero-padded strings. An unquoted `id: 0128`
-// parses as the number 128 and is rejected — atom files must quote the id.
+// Atom ids are either legacy 4-digit zero-padded strings or 6-char lowercase
+// base32 (ndr:0144) — both must be quoted. An unquoted `id: 0128` parses as the
+// number 128 and is rejected. Keep in lockstep with ATOM_ID_PATTERN in atom.ts.
 const AtomIdString = z
   .string()
-  .regex(/^\d{4}$/, "id must be a 4-digit zero-padded string");
+  .regex(
+    /^(?:\d{4}|[0-9a-z]{6})$/,
+    "id must be a 4-digit zero-padded string (legacy) or 6-char lowercase base32",
+  );
 
-const SlugString = z
-  .string()
-  .regex(/^[a-z0-9][a-z0-9-]*$/, "slug must be kebab-case");
+const SlugString = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "slug must be kebab-case");
 
 const IsoDate = z.union([
   z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "decision_date must be ISO YYYY-MM-DD"),

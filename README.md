@@ -7,10 +7,14 @@ See [CONTEXT.md](./CONTEXT.md) for the domain language and intent of the project
 ## Status
 
 The read API is complete: `ndr resolve` handles all three reference grains
-(atom-id, `#slug`, `area/topic`), and `ndr search`, `ndr lineage`, and
-`ndr current` round out the read verbs. Corpus-wide verbs skip a malformed atom
-with a warning rather than aborting; targeted `resolve <id>` still throws.
-`ndr capture` (the write verb) follows in a later slice.
+(atom-id — legacy 4-digit or 6-char base32 — `#slug`, `area/topic`), and
+`ndr search`, `ndr lineage`, and `ndr current` round out the read verbs.
+Corpus-wide verbs skip a malformed atom with a warning rather than aborting;
+targeted `resolve <id>` still throws. `ndr capture` (the write verb) lands the
+full capture contract: schema + taxonomy validation, vault-wide slug uniqueness,
+three-write supersession with alias handover, and locally-generated base32 ids
+(ndr:0144). It reads a draft as JSON on stdin and maps outcomes to exit codes
+0 (ok) / 1 (validation) / 2 (supersession conflict) / 3 (mid-write half-state).
 
 The library exports:
 
@@ -47,6 +51,10 @@ ndr lineage 0070
 # List current atoms, optionally filtered; --verbose expands to full briefs
 ndr current --area tooling
 ndr current --area tooling --topic lint-format --verbose
+
+# Capture a decision atom — draft JSON on stdin, prints the written {id, path,
+# superseded, aliases_moved}. --ledger wins over the draft's vault_decisions.
+echo "$DRAFT_JSON" | ndr capture --ledger ./test/fixtures/ledger
 ```
 
 Brief shape, drift placement, and basename sourcing are pinned by `ndr:0136`.
