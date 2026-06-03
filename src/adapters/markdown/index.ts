@@ -2,6 +2,10 @@ export {
   MarkdownLedgerAdapter,
   AtomNotFoundError,
   AtomValidationError,
+  DraftValidationError,
+  SupersessionConflictError,
+  HalfStateError,
+  type HalfState,
 } from "./adapter.ts";
 export { splitFrontmatter, joinFrontmatter, FenceError } from "./fence.ts";
 export { parseFrontmatterYaml, stringifyFrontmatter } from "./yaml.ts";

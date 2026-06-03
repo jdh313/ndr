@@ -3,9 +3,19 @@ import path from "node:path";
 
 import { Command } from "commander";
 
-import { AtomNotFoundError, MarkdownLedgerAdapter } from "../adapters/markdown/adapter.ts";
-import type { Atom } from "../domain/index.ts";
+import {
+  AtomNotFoundError,
+  DraftValidationError,
+  HalfStateError,
+  MarkdownLedgerAdapter,
+  SupersessionConflictError,
+} from "../adapters/markdown/adapter.ts";
+import type { Atom, AtomDraft } from "../domain/index.ts";
 import { asAtomId } from "../domain/index.ts";
+
+// Both atom-id shapes (ndr:0144): legacy 4-digit and 6-char base32. Keep in
+// lockstep with ATOM_ID_PATTERN in domain/atom.ts.
+const ATOM_ID_REF = /^(?:\d{4}|[0-9a-z]{6})$/;
 
 export const DEFAULT_LEDGER_PATH = path.join(os.homedir(), "Loose Ends", "Decisions");
 
@@ -72,14 +82,28 @@ export async function run(argv: readonly string[]): Promise<number> {
     .option("--area <area>", "Restrict to a single area.")
     .option("--topic <topic>", "Restrict to a single topic.")
     .option("--verbose", "Expand results to full briefs.", false)
-    .action(async (options: { ledger: string; area?: string; topic?: string; verbose: boolean }) => {
-      emit(
-        await currentCommand(options.ledger, {
-          area: options.area,
-          topic: options.topic,
-          verbose: options.verbose,
-        }),
-      );
+    .action(
+      async (options: { ledger: string; area?: string; topic?: string; verbose: boolean }) => {
+        emit(
+          await currentCommand(options.ledger, {
+            area: options.area,
+            topic: options.topic,
+            verbose: options.verbose,
+          }),
+        );
+      },
+    );
+
+  program
+    .command("capture")
+    .description("Capture a decision atom from a draft read as JSON on stdin.")
+    .option(
+      "--ledger <path>",
+      "Ledger directory to write to (wins over the draft's vault_decisions).",
+    )
+    .action(async (options: { ledger?: string }) => {
+      const raw = await readStdin();
+      emit(await captureCommand(raw, options.ledger));
     });
 
   await program.parseAsync([...argv]);
@@ -99,12 +123,12 @@ export async function resolveCommand(
   if (ref.includes("/")) {
     return await resolveTopic(adapter, ref, ledgerPath, opts.verbose ?? false);
   }
-  if (/^\d{4}$/.test(ref)) {
+  if (ATOM_ID_REF.test(ref)) {
     return await resolveAtomId(adapter, ref, ledgerPath);
   }
   return {
     stdout: "",
-    stderr: `unrecognized reference ${JSON.stringify(ref)} — use an atom-id (e.g. 0042), #<slug>, or <area>/<topic>\n`,
+    stderr: `unrecognized reference ${JSON.stringify(ref)} — use an atom-id (e.g. 0042 or k3m9xq), #<slug>, or <area>/<topic>\n`,
     exitCode: 1,
   };
 }
@@ -119,7 +143,11 @@ async function resolveAtomId(
     chain = await adapter.walkLineage(asAtomId(ref));
   } catch (err) {
     if (err instanceof AtomNotFoundError) {
-      return { stdout: "", stderr: `no atom with id ${ref} in ledger ${ledgerPath}\n`, exitCode: 1 };
+      return {
+        stdout: "",
+        stderr: `no atom with id ${ref} in ledger ${ledgerPath}\n`,
+        exitCode: 1,
+      };
     }
     throw err;
   }
@@ -192,9 +220,7 @@ export async function searchCommand(
     return { stdout: `no atoms match ${JSON.stringify(query)}\n`, stderr: "", exitCode: 0 };
   }
 
-  const sorted = [...atoms].sort((a, b) =>
-    a.frontmatter.id.localeCompare(b.frontmatter.id),
-  );
+  const sorted = [...atoms].sort((a, b) => a.frontmatter.id.localeCompare(b.frontmatter.id));
   return {
     stdout: await formatAtomList(sorted, opts.verbose ?? false, adapter),
     stderr: "",
@@ -203,10 +229,10 @@ export async function searchCommand(
 }
 
 export async function lineageCommand(ref: string, ledgerPath: string): Promise<ResolveResult> {
-  if (!/^\d{4}$/.test(ref)) {
+  if (!ATOM_ID_REF.test(ref)) {
     return {
       stdout: "",
-      stderr: `invalid atom-id ${JSON.stringify(ref)} — lineage takes a 4-digit atom-id\n`,
+      stderr: `invalid atom-id ${JSON.stringify(ref)} — lineage takes an atom-id (4-digit or 6-char base32)\n`,
       exitCode: 1,
     };
   }
@@ -217,7 +243,11 @@ export async function lineageCommand(ref: string, ledgerPath: string): Promise<R
     chain = await adapter.walkLineage(asAtomId(ref));
   } catch (err) {
     if (err instanceof AtomNotFoundError) {
-      return { stdout: "", stderr: `no atom with id ${ref} in ledger ${ledgerPath}\n`, exitCode: 1 };
+      return {
+        stdout: "",
+        stderr: `no atom with id ${ref} in ledger ${ledgerPath}\n`,
+        exitCode: 1,
+      };
     }
     throw err;
   }
@@ -232,7 +262,11 @@ export async function currentCommand(
   const adapter = new MarkdownLedgerAdapter(ledgerPath);
   const atoms = await adapter.listCurrent({ area: opts.area, topic: opts.topic });
   if (atoms.length === 0) {
-    return { stdout: `no current atoms${describeScope(opts.area, opts.topic)}\n`, stderr: "", exitCode: 0 };
+    return {
+      stdout: `no current atoms${describeScope(opts.area, opts.topic)}\n`,
+      stderr: "",
+      exitCode: 0,
+    };
   }
 
   return {
@@ -240,6 +274,82 @@ export async function currentCommand(
     stderr: "",
     exitCode: 0,
   };
+}
+
+// Capture a decision atom. `rawJson` is the draft read from stdin; `ledgerFlag`
+// is the --ledger value if the user passed one. Ledger precedence: flag wins,
+// then the draft's `vault_decisions`, then the default. Outcomes map to exit
+// codes 0 (ok) / 1 (validation) / 2 (supersession conflict) / 3 (half-state).
+export async function captureCommand(rawJson: string, ledgerFlag?: string): Promise<ResolveResult> {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(rawJson);
+  } catch (err) {
+    return errorResult("bad_json", [err instanceof Error ? err.message : String(err)], 1);
+  }
+  if (typeof payload !== "object" || payload === null) {
+    return errorResult(
+      "bad_input",
+      ["payload must be a JSON object with `frontmatter` and `body`"],
+      1,
+    );
+  }
+
+  const p = payload as Record<string, unknown>;
+  const ledgerPath =
+    ledgerFlag ?? (typeof p.vault_decisions === "string" ? p.vault_decisions : DEFAULT_LEDGER_PATH);
+
+  if (typeof p.frontmatter !== "object" || p.frontmatter === null) {
+    return errorResult("bad_input", ["`frontmatter` must be an object"], 1);
+  }
+  if (typeof p.body !== "string") {
+    return errorResult("bad_input", ["`body` must be a string"], 1);
+  }
+
+  // A top-level `supersedes` overrides the frontmatter field (persist.py parity).
+  const frontmatter = { ...(p.frontmatter as Record<string, unknown>) };
+  if (Array.isArray(p.supersedes)) frontmatter.supersedes = p.supersedes;
+  const draft = { frontmatter, body: p.body } as unknown as AtomDraft;
+
+  const adapter = new MarkdownLedgerAdapter(ledgerPath);
+  try {
+    const result = await adapter.captureAtom(draft);
+    return { stdout: JSON.stringify(result, null, 2) + "\n", stderr: "", exitCode: 0 };
+  } catch (err) {
+    if (err instanceof DraftValidationError) return errorResult("validation", err.messages, 1);
+    if (err instanceof SupersessionConflictError) {
+      return errorResult("supersession_conflict", err.messages, 2);
+    }
+    if (err instanceof HalfStateError) {
+      return {
+        stdout: "",
+        stderr:
+          JSON.stringify(
+            { error: { kind: "half_state", message: err.message, half_state: err.halfState } },
+            null,
+            2,
+          ) + "\n",
+        exitCode: 3,
+      };
+    }
+    throw err;
+  }
+}
+
+function errorResult(kind: string, messages: readonly string[], exitCode: number): ResolveResult {
+  return {
+    stdout: "",
+    stderr: JSON.stringify({ error: { kind, messages } }, null, 2) + "\n",
+    exitCode,
+  };
+}
+
+async function readStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) {
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 export function formatBrief(chain: readonly Atom[], headFilename: string | null): string {

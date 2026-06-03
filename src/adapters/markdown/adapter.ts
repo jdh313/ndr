@@ -1,17 +1,21 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { parse as parseYaml } from "yaml";
+
 import {
   FrontmatterSchema,
   asAtomId,
   asLedger,
+  generateAtomId,
   type Atom,
   type AtomDraft,
   type AtomId,
+  type Frontmatter,
   type Ledger,
 } from "../../domain/index.ts";
 import type { CurrentFilter, ReadPort } from "../../ports/read.ts";
-import type { WritePort } from "../../ports/write.ts";
+import type { AliasMove, CaptureResult, SupersededRecord, WritePort } from "../../ports/write.ts";
 import { joinFrontmatter, splitFrontmatter } from "./fence.ts";
 import { parseFrontmatterYaml, stringifyFrontmatter } from "./yaml.ts";
 
@@ -33,6 +37,62 @@ export class AtomNotFoundError extends Error {
   constructor(id: string) {
     super(`No atom with id ${id} found in ledger`);
   }
+}
+
+// Capture rejected before any write — required fields, enums, taxonomy, alias
+// prefix, slug uniqueness, or a dangling/unreadable supersedes reference. Maps
+// to CLI exit code 1.
+export class DraftValidationError extends Error {
+  readonly messages: readonly string[];
+
+  constructor(messages: readonly string[]) {
+    super(`Draft validation failed:\n${messages.map((m) => `  - ${m}`).join("\n")}`);
+    this.messages = messages;
+  }
+}
+
+// A predecessor is already superseded by a different atom — refuse cleanly
+// before writing anything. Maps to CLI exit code 2.
+export class SupersessionConflictError extends Error {
+  readonly messages: readonly string[];
+
+  constructor(messages: readonly string[]) {
+    super(`Supersession conflict:\n${messages.map((m) => `  - ${m}`).join("\n")}`);
+    this.messages = messages;
+  }
+}
+
+export interface HalfState {
+  readonly successor_written: string;
+  readonly superseded_so_far: readonly SupersededRecord[];
+  readonly aliases_moved_so_far: readonly AliasMove[];
+  readonly failed_predecessor: string;
+}
+
+// The successor was written but a predecessor patch failed mid-transaction. The
+// successor exists and is discoverable (overcount, never undercount — ndr:0051);
+// the half-state names what was written vs patched. Maps to CLI exit code 3.
+export class HalfStateError extends Error {
+  readonly halfState: HalfState;
+
+  constructor(halfState: HalfState, cause: unknown) {
+    super(
+      `Capture left a half-state: successor ${halfState.successor_written} was written, ` +
+        `but patching predecessor ${halfState.failed_predecessor} failed: ` +
+        `${cause instanceof Error ? cause.message : String(cause)}`,
+    );
+    this.halfState = halfState;
+  }
+}
+
+// A predecessor read during pre-flight, carried into the write phase so the patch
+// preserves the original frontmatter shape (key order, no injected defaults).
+interface PredecessorState {
+  readonly id: string;
+  readonly filename: string;
+  readonly aliases: readonly string[];
+  readonly data: Record<string, unknown>;
+  readonly body: string;
 }
 
 export class MarkdownLedgerAdapter implements ReadPort, WritePort {
@@ -106,22 +166,228 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort {
     );
   }
 
-  async captureAtom(draft: AtomDraft): Promise<AtomId> {
-    const id = draft.frontmatter.id ?? (await this.mintNextId());
-    const frontmatter = { ...draft.frontmatter, id };
-    const parsed = FrontmatterSchema.parse(frontmatter);
+  async captureAtom(draft: AtomDraft): Promise<CaptureResult> {
+    // 1. Mint an id if the draft omits one, then validate the full frontmatter.
+    const id = draft.frontmatter.id ?? (await this.mintFreshId());
+    const parsed = this.validateDraft({ ...draft.frontmatter, id });
 
-    const slug = slugifyTitle(parsed.title);
-    const filename = `${id}-${slug}.md`;
-    const target = path.join(this.ledger, filename);
+    // 2. Taxonomy gate — area and topic must be in the on-disk taxonomy (ndr:0144
+    //    keeps the human axis in slugs/taxonomy now that ids are opaque).
+    await this.assertTaxonomy(parsed.area, parsed.topic);
 
-    const yaml = stringifyFrontmatter(parsed as unknown as Record<string, unknown>);
-    const body = draft.body.startsWith("\n") ? draft.body : `\n${draft.body}`;
-    const file = joinFrontmatter(yaml, body);
+    // 3. Pre-flight every predecessor before touching disk: a dangling reference is
+    //    exit 1, an already-superseded predecessor is a clean exit-2 refusal. No
+    //    orphan successor — only genuine mid-write failures leave a half-state.
+    const predecessors = await this.preflightSupersession(parsed.supersedes);
 
+    // 4. Slug uniqueness across the corpus (ndr:0050), exempting any slug a
+    //    predecessor in this same capture is about to vacate (ndr:0051).
+    const predecessorIds = predecessors.map((p) => p.id);
+    await this.assertSlugsUnique(parsed.aliases, predecessorIds);
+
+    // 5. Hand predecessor slugs to the successor (merge + dedupe).
+    const movedSlugs = predecessors.flatMap((p) => [...p.aliases]);
+    const successorAliases = dedupeAliases([...parsed.aliases, ...movedSlugs]);
+    const successorFm: Frontmatter = { ...parsed, aliases: successorAliases };
+
+    // 6. Write the successor FIRST (ndr:0051 ordering) so a crash overcounts
+    //    rather than drops.
+    const filename = `${id}-${slugifyTitle(parsed.title)}.md`;
+    const body = patchBodyPlaceholder(draft.body, id);
+    await this.writeAtomFile(filename, successorFm, body);
+
+    // 7. Patch each predecessor: flip to superseded, add the back-link, vacate its
+    //    slugs. A failure here is a reported half-state, not a silent drop.
+    const superseded: SupersededRecord[] = [];
+    const aliasesMoved: AliasMove[] = [];
+    for (const pred of predecessors) {
+      try {
+        await this.patchPredecessor(pred, filename);
+      } catch (err) {
+        throw new HalfStateError(
+          {
+            successor_written: filename,
+            superseded_so_far: superseded,
+            aliases_moved_so_far: aliasesMoved,
+            failed_predecessor: pred.filename,
+          },
+          err,
+        );
+      }
+      superseded.push({ id: pred.id, path: pred.filename });
+      for (const slug of pred.aliases) {
+        aliasesMoved.push({ slug, from: pred.id, to: id });
+      }
+    }
+
+    return { id: asAtomId(id), path: filename, superseded, aliases_moved: aliasesMoved };
+  }
+
+  // Validate the draft frontmatter against the schema, then enforce the capture-only
+  // rule that aliases carry the `ndr-` namespace prefix (the schema accepts any
+  // kebab slug so the read side can match either form).
+  private validateDraft(candidate: Record<string, unknown>): Frontmatter {
+    const result = FrontmatterSchema.safeParse(candidate);
+    if (!result.success) {
+      throw new DraftValidationError(
+        result.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`),
+      );
+    }
+    const badAliases = result.data.aliases.filter((a) => !a.startsWith("ndr-"));
+    if (badAliases.length > 0) {
+      throw new DraftValidationError(
+        badAliases.map((a) => `alias \`${a}\` must carry the \`ndr-\` prefix (ndr:0050)`),
+      );
+    }
+    return result.data;
+  }
+
+  private async assertTaxonomy(area: string, topic: string): Promise<void> {
+    const dir = path.join(this.ledger, ".taxonomy");
+    const areas = await this.readTaxonomyList(path.join(dir, "areas.yaml"));
+    const topics = await this.readTaxonomyList(path.join(dir, "topics.yaml"));
+    const errors: string[] = [];
+    if (!areas.includes(area)) {
+      errors.push(`area \`${area}\` not in taxonomy areas [${areas.join(", ")}]`);
+    }
+    if (!topics.includes(topic)) {
+      errors.push(`topic \`${topic}\` not in taxonomy topics [${topics.join(", ")}]`);
+    }
+    if (errors.length > 0) throw new DraftValidationError(errors);
+  }
+
+  private async readTaxonomyList(file: string): Promise<string[]> {
+    let raw: string;
+    try {
+      raw = await fs.readFile(file, "utf8");
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new DraftValidationError([`taxonomy file missing: ${file}`]);
+      }
+      throw err;
+    }
+    const parsed: unknown = parseYaml(raw);
+    if (!Array.isArray(parsed)) {
+      throw new DraftValidationError([`taxonomy file ${file} must be a YAML list`]);
+    }
+    return parsed.filter((x): x is string => typeof x === "string");
+  }
+
+  private async preflightSupersession(links: readonly string[]): Promise<PredecessorState[]> {
+    const out: PredecessorState[] = [];
+    const errors: string[] = [];
+    const conflicts: string[] = [];
+
+    for (const link of links) {
+      const predId = extractAtomIdFromWikilink(link);
+      if (predId === null) {
+        errors.push(`supersedes entry \`${link}\` is not a recognizable wikilink`);
+        continue;
+      }
+      const file = await this.findFileForId(predId);
+      if (file === null) {
+        errors.push(`predecessor ${predId} (from \`${link}\`) not found in ledger`);
+        continue;
+      }
+      let data: Record<string, unknown>;
+      let body: string;
+      try {
+        const raw = await fs.readFile(file, "utf8");
+        const split = splitFrontmatter(raw);
+        const parsedFm = parseFrontmatterYaml(split.yaml);
+        data = (parsedFm.data ?? {}) as Record<string, unknown>;
+        body = split.body;
+      } catch (err) {
+        errors.push(
+          `predecessor ${predId} could not be read: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        continue;
+      }
+
+      if (data.status === "superseded") {
+        const by = Array.isArray(data.superseded_by) ? data.superseded_by : [];
+        conflicts.push(
+          `predecessor ${predId} is already superseded by ${JSON.stringify(by)} — refusing to add a competing successor`,
+        );
+        continue;
+      }
+
+      const aliases = Array.isArray(data.aliases)
+        ? data.aliases.filter((a): a is string => typeof a === "string")
+        : [];
+      out.push({ id: predId, filename: path.basename(file), aliases, data, body });
+    }
+
+    // Dangling/unreadable references are the more fundamental error — surface them
+    // (exit 1) before a conflict refusal (exit 2).
+    if (errors.length > 0) throw new DraftValidationError(errors);
+    if (conflicts.length > 0) throw new SupersessionConflictError(conflicts);
+    return out;
+  }
+
+  private async assertSlugsUnique(
+    draftAliases: readonly string[],
+    exemptIds: readonly string[],
+  ): Promise<void> {
+    if (draftAliases.length === 0) return;
+    const exempt = new Set(exemptIds);
+    const owners = new Map<string, string>();
+    for (const atom of await this.readAllAtoms()) {
+      if (exempt.has(atom.frontmatter.id)) continue;
+      for (const alias of atom.frontmatter.aliases) {
+        owners.set(normalizeSlug(alias), atom.frontmatter.id);
+      }
+    }
+    const errors: string[] = [];
+    for (const alias of draftAliases) {
+      const owner = owners.get(normalizeSlug(alias));
+      if (owner !== undefined) {
+        errors.push(
+          `slug \`${alias}\` is already held by atom ${owner} (ndr:0050 — one slug, one atom)`,
+        );
+      }
+    }
+    if (errors.length > 0) throw new DraftValidationError(errors);
+  }
+
+  private async writeAtomFile(
+    filename: string,
+    frontmatter: Frontmatter,
+    body: string,
+  ): Promise<void> {
+    const yaml = stringifyFrontmatter(frontmatter as unknown as Record<string, unknown>);
+    const normalizedBody = body.startsWith("\n") ? body : `\n${body}`;
+    const file = joinFrontmatter(yaml, normalizedBody);
     await fs.mkdir(this.ledger, { recursive: true });
-    await fs.writeFile(target, file, "utf8");
-    return asAtomId(id);
+    try {
+      // `wx` refuses to clobber — a freshly minted id should never collide, but
+      // guard against it rather than silently overwriting an existing atom.
+      await fs.writeFile(path.join(this.ledger, filename), file, { encoding: "utf8", flag: "wx" });
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+        throw new Error(`target already exists: ${filename}`);
+      }
+      throw err;
+    }
+  }
+
+  // Patch the raw parsed frontmatter (not the schema-shaped object) so the
+  // predecessor keeps its original key order and gains no injected defaults.
+  private async patchPredecessor(pred: PredecessorState, successorFilename: string): Promise<void> {
+    const successorWikilink = `[[Decisions/${successorFilename.replace(/\.md$/, "")}]]`;
+    const data: Record<string, unknown> = { ...pred.data };
+    data.status = "superseded";
+    const backlinks = Array.isArray(data.superseded_by) ? [...data.superseded_by] : [];
+    if (!backlinks.includes(successorWikilink)) backlinks.push(successorWikilink);
+    data.superseded_by = backlinks;
+    if (pred.aliases.length > 0) data.aliases = [];
+    const yaml = stringifyFrontmatter(data);
+    const bodyBlock = pred.body.startsWith("\n") ? pred.body : `\n${pred.body}`;
+    await fs.writeFile(
+      path.join(this.ledger, pred.filename),
+      joinFrontmatter(yaml, bodyBlock),
+      "utf8",
+    );
   }
 
   private async findFileForId(id: AtomId): Promise<string | null> {
@@ -180,17 +446,19 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort {
     return entries.filter((name) => name.endsWith(".md") && !name.startsWith("."));
   }
 
-  private async mintNextId(): Promise<string> {
-    const entries = await this.listMarkdownFiles();
-    let max = 0;
-    for (const name of entries) {
-      const m = /^(\d{4})-/.exec(name);
-      if (m) {
-        const n = Number.parseInt(m[1]!, 10);
-        if (n > max) max = n;
-      }
+  // Mint a fresh base32 id (ndr:0144), re-rolling on the vanishingly unlikely
+  // event of a same-ledger collision before the write would clobber.
+  private async mintFreshId(): Promise<string> {
+    const taken = new Set<string>();
+    for (const name of await this.listMarkdownFiles()) {
+      const m = /^([0-9a-z]+)-/.exec(name);
+      if (m) taken.add(m[1]!);
     }
-    return String(max + 1).padStart(4, "0");
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const id = generateAtomId();
+      if (!taken.has(id)) return id;
+    }
+    throw new Error("could not mint a collision-free atom id after 8 attempts");
   }
 }
 
@@ -208,7 +476,7 @@ function hasAlias(atom: Atom, normalizedTarget: string): boolean {
 function extractAtomIdFromWikilink(link: string): AtomId | null {
   const cleaned = link.replace(/^\[\[|\]\]$/g, "");
   const tail = cleaned.split("/").pop() ?? cleaned;
-  const m = /^(\d{4})(?:-|$)/.exec(tail);
+  const m = /^(\d{4}|[0-9a-z]{6})(?:-|$)/.exec(tail);
   return m ? asAtomId(m[1]!) : null;
 }
 
@@ -218,4 +486,26 @@ function slugifyTitle(title: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);
+}
+
+// The drafter leaves a literal `# PLACEHOLDER —` heading; stamp the real id in
+// once it is assigned. String.replace hits only the first occurrence (as in
+// persist.py) so a body that legitimately mentions "PLACEHOLDER" elsewhere is
+// left untouched.
+function patchBodyPlaceholder(body: string, id: string): string {
+  return body.replace("# PLACEHOLDER —", `# ${id} —`).replace("# PLACEHOLDER -", `# ${id} -`);
+}
+
+// Slugs handed from predecessors can overlap a successor's own aliases; keep
+// each only once, preserving first-seen order.
+function dedupeAliases(aliases: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const alias of aliases) {
+    const key = normalizeSlug(alias);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(alias);
+  }
+  return out;
 }

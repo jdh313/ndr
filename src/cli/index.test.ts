@@ -1,9 +1,50 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { promises as fs } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
-import { currentCommand, lineageCommand, resolveCommand, searchCommand } from "./index.ts";
+import {
+  captureCommand,
+  currentCommand,
+  lineageCommand,
+  resolveCommand,
+  searchCommand,
+} from "./index.ts";
 
 const FIXTURES = path.resolve(import.meta.dir, "../../test/fixtures/ledger");
+
+async function makeLedger(): Promise<string> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-cli-"));
+  const taxonomy = path.join(dir, ".taxonomy");
+  await fs.mkdir(taxonomy);
+  await fs.writeFile(path.join(taxonomy, "areas.yaml"), "- tooling\n- substrate\n", "utf8");
+  await fs.writeFile(path.join(taxonomy, "topics.yaml"), "- framework\n- substrate\n", "utf8");
+  return dir;
+}
+
+function draftJson(fm: Record<string, unknown> = {}): string {
+  return JSON.stringify({
+    frontmatter: {
+      title: "Use FastAPI",
+      status: "current",
+      decision_date: "2026-05-15",
+      aliases: [],
+      project: "[[Auth]]",
+      derived_from: [],
+      informed_by: [],
+      supersedes: [],
+      superseded_by: [],
+      area: "tooling",
+      topic: "framework",
+      impacts: [],
+      revisit_triggers: [],
+      reversibility: "medium",
+      tags: ["decision"],
+      ...fm,
+    },
+    body: "\n# PLACEHOLDER — Use FastAPI\n\n## Decision\n\nUse FastAPI.\n",
+  });
+}
 
 describe("ndr resolve <atom-id>", () => {
   test("head atom returns brief with no drift warning", async () => {
@@ -146,7 +187,74 @@ describe("ndr lineage <id>", () => {
   test("non-atom-id argument is rejected", async () => {
     const result = await lineageCommand("abc", FIXTURES);
     expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain("lineage takes a 4-digit atom-id");
+    expect(result.stderr).toContain("lineage takes an atom-id");
+  });
+});
+
+describe("ndr capture", () => {
+  let tmp: string;
+  beforeEach(async () => {
+    tmp = await makeLedger();
+  });
+  afterEach(async () => {
+    await fs.rm(tmp, { recursive: true, force: true });
+  });
+
+  test("a valid draft writes a base32 atom and prints its result on stdout", async () => {
+    const result = await captureCommand(draftJson(), tmp);
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.id).toMatch(/^[0-9a-z]{6}$/);
+    expect(parsed.path).toBe(`${parsed.id}-use-fastapi.md`);
+
+    // The written atom resolves back through the (widened) atom-id resolver.
+    const round = await resolveCommand(parsed.id, tmp);
+    expect(round.exitCode).toBe(0);
+    expect(round.stdout).toContain("Use FastAPI");
+    expect(round.stdout).toContain(`Lineage: ${parsed.id}`);
+  });
+
+  test("malformed JSON exits 1 with a bad_json error", async () => {
+    const result = await captureCommand("{not json", tmp);
+    expect(result.exitCode).toBe(1);
+    expect(JSON.parse(result.stderr).error.kind).toBe("bad_json");
+  });
+
+  test("a taxonomy violation exits 1 with a validation error", async () => {
+    const result = await captureCommand(draftJson({ area: "nope" }), tmp);
+    expect(result.exitCode).toBe(1);
+    expect(JSON.parse(result.stderr).error.kind).toBe("validation");
+  });
+
+  test("an already-superseded predecessor exits 2", async () => {
+    await fs.writeFile(
+      path.join(tmp, "0001-old.md"),
+      '---\nid: "0001"\ntitle: Old\nstatus: superseded\ndecision_date: 2026-01-01\naliases: []\nproject: "[[X]]"\nsupersedes: []\nsuperseded_by: ["[[Decisions/0050-other]]"]\narea: tooling\ntopic: framework\nreversibility: easy\ntags: ["decision"]\n---\nbody\n',
+      "utf8",
+    );
+    const result = await captureCommand(draftJson({ supersedes: ["[[Decisions/0001-old]]"] }), tmp);
+    expect(result.exitCode).toBe(2);
+    expect(JSON.parse(result.stderr).error.kind).toBe("supersession_conflict");
+  });
+
+  test("the --ledger flag wins over the draft's vault_decisions", async () => {
+    const other = await makeLedger();
+    try {
+      const payload = JSON.stringify({
+        vault_decisions: other,
+        ...JSON.parse(draftJson()),
+      });
+      const result = await captureCommand(payload, tmp);
+      expect(result.exitCode).toBe(0);
+      const parsed = JSON.parse(result.stdout);
+      // Atom landed in the flag ledger (tmp), not the payload one (other).
+      expect(await fs.readdir(tmp)).toContain(parsed.path);
+      expect(await fs.readdir(other)).not.toContain(parsed.path);
+    } finally {
+      await fs.rm(other, { recursive: true, force: true });
+    }
   });
 });
 

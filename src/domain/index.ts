@@ -7,6 +7,8 @@ export {
 export {
   asAtomId,
   asSlug,
+  generateAtomId,
+  ATOM_ID_PATTERN,
   type AtomId,
   type Slug,
   type Reference,
