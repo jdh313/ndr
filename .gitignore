@@ -7,6 +7,7 @@ build/
 
 # Bun
 .bun/
+.*.bun-build
 
 # TypeScript
 *.tsbuildinfo

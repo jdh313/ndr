@@ -78,3 +78,19 @@ bun run lint
 bun run format
 bun run typecheck
 ```
+
+## Build & install
+
+`ndr` ships as a single-file binary compiled by Bun. One command builds it and
+links it onto your PATH:
+
+```sh
+# Compile src/cli/bin.ts → dist/ndr, then symlink it into ~/.local/bin
+bun run install:bin
+```
+
+`bun run build` alone just emits `dist/ndr` (gitignored). The symlink means a
+later `bun run build` updates the installed binary in place — no re-link needed.
+The binary defaults the ledger to `~/Loose Ends/Decisions/` from any working
+directory; override per-invocation with `--ledger`. Built and tested against
+Bun 1.3.x.
