@@ -1,0 +1,7 @@
+# Areas — the "what is this decision about" axis.
+# Finite list, hand-edited. Capture skill refuses unknown values.
+# To add: edit this file (friction is the feature — prevents drift).
+- process       # how decisions get made / written / read
+- tooling       # what we use to make / store / read them
+- scope         # what's in vs out (MVP, pilot, team-product)
+- substrate     # storage and retrieval medium

@@ -1,0 +1,10 @@
+# Topics — finer-grained, within an area.
+# Finite list, hand-edited. Capture skill refuses unknown values.
+# To add: edit this file.
+- substrate            # storage choice (markdown, graph DB, CMS)
+- read-side            # context-loading, retrieval, supersession resolution
+- write-side           # capture, materialization, schema enforcement
+- granularity          # atomic vs bundled, file vs directory
+- mvp-scope            # what's in / out of MVP
+- test-method          # how we validate the discipline (Q1 / Q2a / Q2b)
+- discipline           # what humans must do without tool support

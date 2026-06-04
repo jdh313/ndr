@@ -1,0 +1,119 @@
+filters:
+  and:
+    - file.inFolder("Decisions")
+properties:
+  note.id:
+    displayName: id
+  note.title:
+    displayName: title
+  note.status:
+    displayName: status
+  note.project:
+    displayName: project
+  note.area:
+    displayName: area
+  note.topic:
+    displayName: topic
+  note.decision_date:
+    displayName: date
+  note.reversibility:
+    displayName: reversibility
+  note.impacts:
+    displayName: impacts
+  note.supersedes:
+    displayName: supersedes
+  note.superseded_by:
+    displayName: superseded by
+  note.derived_from:
+    displayName: derived from
+views:
+  - type: cards
+    name: Log
+    filters:
+      and:
+        - 'status == "current"'
+    order:
+      - title
+      - project
+      - area
+      - topic
+      - decision_date
+    sort:
+      - property: decision_date
+        direction: DESC
+  - type: table
+    name: Current
+    filters:
+      and:
+        - 'status == "current"'
+    groupBy:
+      property: project
+      direction: ASC
+    order:
+      - file.name
+      - title
+      - area
+      - topic
+      - decision_date
+      - reversibility
+    sort:
+      - property: decision_date
+        direction: DESC
+      - property: file.name
+        direction: ASC
+    columnSize:
+      note.title: 360
+      note.project: 200
+      note.area: 120
+      note.topic: 140
+      note.decision_date: 110
+      note.reversibility: 110
+    rowHeight: tall
+  - type: table
+    name: By Area
+    filters:
+      and:
+        - 'status == "current"'
+    groupBy:
+      property: area
+      direction: ASC
+    order:
+      - file.name
+      - title
+      - project
+      - topic
+      - decision_date
+    sort:
+      - property: topic
+        direction: ASC
+      - property: decision_date
+        direction: DESC
+  - type: table
+    name: Superseded
+    filters:
+      and:
+        - 'status == "superseded"'
+    order:
+      - file.name
+      - title
+      - project
+      - superseded_by
+      - decision_date
+    sort:
+      - property: decision_date
+        direction: DESC
+  - type: table
+    name: All
+    order:
+      - file.name
+      - title
+      - status
+      - project
+      - area
+      - topic
+      - decision_date
+    sort:
+      - property: status
+        direction: ASC
+      - property: decision_date
+        direction: DESC
