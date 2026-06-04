@@ -241,6 +241,30 @@ describe("ndr capture", () => {
     expect(JSON.parse(result.stderr).error.kind).toBe("supersession_conflict");
   });
 
+  test("the fallback ledger (.ndr.toml walk-up) is used when neither flag nor vault_decisions is set", async () => {
+    const result = await captureCommand(draftJson(), undefined, tmp);
+    expect(result.exitCode).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(await fs.readdir(tmp)).toContain(parsed.path);
+  });
+
+  test("the draft's vault_decisions wins over the fallback ledger", async () => {
+    const other = await makeLedger();
+    try {
+      const payload = JSON.stringify({
+        vault_decisions: tmp,
+        ...JSON.parse(draftJson()),
+      });
+      const result = await captureCommand(payload, undefined, other);
+      expect(result.exitCode).toBe(0);
+      const parsed = JSON.parse(result.stdout);
+      expect(await fs.readdir(tmp)).toContain(parsed.path);
+      expect(await fs.readdir(other)).not.toContain(parsed.path);
+    } finally {
+      await fs.rm(other, { recursive: true, force: true });
+    }
+  });
+
   test("the --ledger flag wins over the draft's vault_decisions", async () => {
     const other = await makeLedger();
     try {

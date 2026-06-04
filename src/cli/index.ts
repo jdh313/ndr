@@ -1,6 +1,3 @@
-import os from "node:os";
-import path from "node:path";
-
 import { Command } from "commander";
 
 import {
@@ -10,6 +7,12 @@ import {
   MarkdownLedgerAdapter,
   SupersessionConflictError,
 } from "../adapters/markdown/adapter.ts";
+import {
+  DEFAULT_LEDGER_PATH,
+  RepoConfigError,
+  findRepoConfig,
+  resolveLedgerPath,
+} from "./config.ts";
 import type {
   Atom,
   AtomDraft,
@@ -23,7 +26,7 @@ import { CHECK_CLASSES, asAtomId, diagnose } from "../domain/index.ts";
 // lockstep with ATOM_ID_PATTERN in domain/atom.ts.
 const ATOM_ID_REF = /^(?:\d{4}|[0-9a-z]{6})$/;
 
-export const DEFAULT_LEDGER_PATH = path.join(os.homedir(), "Loose Ends", "Decisions");
+export { DEFAULT_LEDGER_PATH } from "./config.ts";
 
 export interface ResolveResult {
   readonly stdout: string;
@@ -55,43 +58,72 @@ export async function run(argv: readonly string[]): Promise<number> {
     exitCode = result.exitCode;
   };
 
+  // Ledger resolution order: --ledger flag > .ndr.toml walk-up from CWD >
+  // vault default (ndr:0130, ndr:0147). A broken .ndr.toml fails loudly;
+  // null signals the action to bail after the error has been emitted.
+  const resolveLedger = (flag: string | undefined): string | null => {
+    try {
+      return resolveLedgerPath(flag, process.cwd());
+    } catch (err) {
+      if (err instanceof RepoConfigError) {
+        emit({ stdout: "", stderr: `${err.message}\n`, exitCode: 1 });
+        return null;
+      }
+      throw err;
+    }
+  };
+
   program
     .command("resolve <ref>")
     .description("Resolve an ndr reference (atom-id, #slug, or area/topic) and print a brief.")
-    .option("--ledger <path>", "Ledger directory to resolve against.", DEFAULT_LEDGER_PATH)
+    .option(
+      "--ledger <path>",
+      "Ledger directory to resolve against (default: .ndr.toml walk-up, then vault).",
+    )
     .option("--verbose", "Expand multi-atom results to full briefs.", false)
-    .action(async (ref: string, options: { ledger: string; verbose: boolean }) => {
-      emit(await resolveCommand(ref, options.ledger, { verbose: options.verbose }));
+    .action(async (ref: string, options: { ledger?: string; verbose: boolean }) => {
+      const ledger = resolveLedger(options.ledger);
+      if (ledger === null) return;
+      emit(await resolveCommand(ref, ledger, { verbose: options.verbose }));
     });
 
   program
     .command("search <query>")
     .description("Free-text search across atom title and body.")
-    .option("--ledger <path>", "Ledger directory to search.", DEFAULT_LEDGER_PATH)
+    .option(
+      "--ledger <path>",
+      "Ledger directory to search (default: .ndr.toml walk-up, then vault).",
+    )
     .option("--verbose", "Expand results to full briefs.", false)
-    .action(async (query: string, options: { ledger: string; verbose: boolean }) => {
-      emit(await searchCommand(query, options.ledger, { verbose: options.verbose }));
+    .action(async (query: string, options: { ledger?: string; verbose: boolean }) => {
+      const ledger = resolveLedger(options.ledger);
+      if (ledger === null) return;
+      emit(await searchCommand(query, ledger, { verbose: options.verbose }));
     });
 
   program
     .command("lineage <id>")
     .description("Walk the supersession chain from an atom-id to its head.")
-    .option("--ledger <path>", "Ledger directory to walk.", DEFAULT_LEDGER_PATH)
-    .action(async (id: string, options: { ledger: string }) => {
-      emit(await lineageCommand(id, options.ledger));
+    .option("--ledger <path>", "Ledger directory to walk (default: .ndr.toml walk-up, then vault).")
+    .action(async (id: string, options: { ledger?: string }) => {
+      const ledger = resolveLedger(options.ledger);
+      if (ledger === null) return;
+      emit(await lineageCommand(id, ledger));
     });
 
   program
     .command("current")
     .description("List all current atoms, optionally filtered by area and/or topic.")
-    .option("--ledger <path>", "Ledger directory to list.", DEFAULT_LEDGER_PATH)
+    .option("--ledger <path>", "Ledger directory to list (default: .ndr.toml walk-up, then vault).")
     .option("--area <area>", "Restrict to a single area.")
     .option("--topic <topic>", "Restrict to a single topic.")
     .option("--verbose", "Expand results to full briefs.", false)
     .action(
-      async (options: { ledger: string; area?: string; topic?: string; verbose: boolean }) => {
+      async (options: { ledger?: string; area?: string; topic?: string; verbose: boolean }) => {
+        const ledger = resolveLedger(options.ledger);
+        if (ledger === null) return;
         emit(
-          await currentCommand(options.ledger, {
+          await currentCommand(ledger, {
             area: options.area,
             topic: options.topic,
             verbose: options.verbose,
@@ -103,11 +135,16 @@ export async function run(argv: readonly string[]): Promise<number> {
   program
     .command("doctor")
     .description("Run corpus health checks over a ledger; --fix repairs missing back-links.")
-    .option("--ledger <path>", "Ledger directory to check.", DEFAULT_LEDGER_PATH)
+    .option(
+      "--ledger <path>",
+      "Ledger directory to check (default: .ndr.toml walk-up, then vault).",
+    )
     .option("--fix", "Repair missing superseded_by back-links (the one auto-fixable class).", false)
     .option("--json", "Emit a structured JSON report instead of the human one.", false)
-    .action(async (options: { ledger: string; fix: boolean; json: boolean }) => {
-      emit(await doctorCommand(options.ledger, { fix: options.fix, json: options.json }));
+    .action(async (options: { ledger?: string; fix: boolean; json: boolean }) => {
+      const ledger = resolveLedger(options.ledger);
+      if (ledger === null) return;
+      emit(await doctorCommand(ledger, { fix: options.fix, json: options.json }));
     });
 
   program
@@ -119,7 +156,20 @@ export async function run(argv: readonly string[]): Promise<number> {
     )
     .action(async (options: { ledger?: string }) => {
       const raw = await readStdin();
-      emit(await captureCommand(raw, options.ledger));
+      // Precedence: flag > draft vault_decisions > .ndr.toml walk-up > vault
+      // default. The walk-up runs eagerly so a broken .ndr.toml fails loudly
+      // even when the draft carries its own ledger.
+      let fallback: string;
+      try {
+        fallback = findRepoConfig(process.cwd())?.ledger ?? DEFAULT_LEDGER_PATH;
+      } catch (err) {
+        if (err instanceof RepoConfigError) {
+          emit({ stdout: "", stderr: `${err.message}\n`, exitCode: 1 });
+          return;
+        }
+        throw err;
+      }
+      emit(await captureCommand(raw, options.ledger, fallback));
     });
 
   await program.parseAsync([...argv]);
@@ -294,9 +344,15 @@ export async function currentCommand(
 
 // Capture a decision atom. `rawJson` is the draft read from stdin; `ledgerFlag`
 // is the --ledger value if the user passed one. Ledger precedence: flag wins,
-// then the draft's `vault_decisions`, then the default. Outcomes map to exit
-// codes 0 (ok) / 1 (validation) / 2 (supersession conflict) / 3 (half-state).
-export async function captureCommand(rawJson: string, ledgerFlag?: string): Promise<ResolveResult> {
+// then the draft's `vault_decisions`, then `fallbackLedger` (the .ndr.toml
+// walk-up result or the vault default, resolved by the caller). Outcomes map
+// to exit codes 0 (ok) / 1 (validation) / 2 (supersession conflict) / 3
+// (half-state).
+export async function captureCommand(
+  rawJson: string,
+  ledgerFlag?: string,
+  fallbackLedger: string = DEFAULT_LEDGER_PATH,
+): Promise<ResolveResult> {
   let payload: unknown;
   try {
     payload = JSON.parse(rawJson);
@@ -313,7 +369,7 @@ export async function captureCommand(rawJson: string, ledgerFlag?: string): Prom
 
   const p = payload as Record<string, unknown>;
   const ledgerPath =
-    ledgerFlag ?? (typeof p.vault_decisions === "string" ? p.vault_decisions : DEFAULT_LEDGER_PATH);
+    ledgerFlag ?? (typeof p.vault_decisions === "string" ? p.vault_decisions : fallbackLedger);
 
   if (typeof p.frontmatter !== "object" || p.frontmatter === null) {
     return errorResult("bad_input", ["`frontmatter` must be an object"], 1);
