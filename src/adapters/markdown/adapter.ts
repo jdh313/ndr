@@ -7,17 +7,24 @@ import {
   FrontmatterSchema,
   asAtomId,
   asLedger,
+  extractAtomIdFromWikilink,
   generateAtomId,
+  normalizeSlug,
   type Atom,
   type AtomDraft,
   type AtomId,
   type Frontmatter,
   type Ledger,
+  type LedgerScan,
+  type MalformedFile,
+  type ScannedAtom,
+  type Taxonomy,
 } from "../../domain/index.ts";
+import type { DoctorPort } from "../../ports/doctor.ts";
 import type { CurrentFilter, ReadPort } from "../../ports/read.ts";
 import type { AliasMove, CaptureResult, SupersededRecord, WritePort } from "../../ports/write.ts";
 import { joinFrontmatter, splitFrontmatter } from "./fence.ts";
-import { parseFrontmatterYaml, stringifyFrontmatter } from "./yaml.ts";
+import { appendToSequence, parseFrontmatterYaml, stringifyFrontmatter } from "./yaml.ts";
 
 export class AtomValidationError extends Error {
   readonly file: string;
@@ -95,7 +102,7 @@ interface PredecessorState {
   readonly body: string;
 }
 
-export class MarkdownLedgerAdapter implements ReadPort, WritePort {
+export class MarkdownLedgerAdapter implements ReadPort, WritePort, DoctorPort {
   readonly ledger: Ledger;
 
   constructor(ledgerPath: string) {
@@ -414,25 +421,90 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort {
 
   // Bulk read for the corpus-wide verbs (search, current, slug lookup). A single
   // malformed atom must not abort the whole command — skip it with a warning and
-  // keep going. Targeted reads (getAtom / resolve <id>) still throw, so a direct
-  // lookup of a bad atom surfaces the validation error.
+  // keep going (ndr:0138). Targeted reads (getAtom / resolve <id>) still throw,
+  // so a direct lookup of a bad atom surfaces the validation error.
   private async readAllAtoms(): Promise<Atom[]> {
-    const entries = await this.listMarkdownFiles();
-    const atoms: Atom[] = [];
-    for (const name of entries) {
-      const file = path.join(this.ledger, name);
-      try {
-        atoms.push(await this.readAtomFile(file));
-      } catch (err) {
-        if (err instanceof AtomValidationError) {
-          const detail = err.issues.map((i) => `${i.path}: ${i.message}`).join("; ");
-          console.warn(`ndr: skipping malformed atom ${name} (${detail})`);
-          continue;
-        }
-        throw err;
-      }
+    const scan = await this.scanLedger();
+    for (const m of scan.malformed) {
+      console.warn(`ndr: skipping malformed atom ${m.path} (${m.reason})`);
     }
-    return atoms;
+    return scan.atoms.map((a) => ({ frontmatter: a.frontmatter, body: a.body }));
+  }
+
+  // Full ledger sweep for `ndr doctor`: every markdown file lands either in
+  // `atoms` (schema-valid) or `malformed` (fence/YAML failure or schema
+  // rejection) — nothing is dropped. Raw frontmatter data rides along on
+  // schema rejections so the domain layer can classify missing required
+  // fields apart from other violations.
+  async scanLedger(): Promise<LedgerScan> {
+    const atoms: ScannedAtom[] = [];
+    const malformed: MalformedFile[] = [];
+    for (const name of await this.listMarkdownFiles()) {
+      const raw = await fs.readFile(path.join(this.ledger, name), "utf8");
+
+      let data: unknown;
+      let body: string;
+      try {
+        const split = splitFrontmatter(raw);
+        data = parseFrontmatterYaml(split.yaml).data;
+        body = split.body;
+      } catch (err) {
+        malformed.push({
+          path: name,
+          kind: "parse_error",
+          // Collapse multi-line parser context — findings are one line each.
+          reason: (err instanceof Error ? err.message : String(err)).replace(/\s+/g, " ").trim(),
+          data: null,
+        });
+        continue;
+      }
+
+      const result = FrontmatterSchema.safeParse(data);
+      if (!result.success) {
+        malformed.push({
+          path: name,
+          kind: "schema_invalid",
+          reason: result.error.issues
+            .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+            .join("; "),
+          data:
+            typeof data === "object" && data !== null ? (data as Record<string, unknown>) : null,
+        });
+        continue;
+      }
+
+      atoms.push({ path: name, frontmatter: result.data, body });
+    }
+    return { atoms, malformed };
+  }
+
+  // Taxonomy for doctor checks. Unlike the capture-time gate (which refuses the
+  // write), a missing or unreadable taxonomy here returns null so the sweep
+  // proceeds with taxonomy checks skipped.
+  async readTaxonomy(): Promise<Taxonomy | null> {
+    const dir = path.join(this.ledger, ".taxonomy");
+    try {
+      return {
+        areas: await this.readTaxonomyList(path.join(dir, "areas.yaml")),
+        topics: await this.readTaxonomyList(path.join(dir, "topics.yaml")),
+      };
+    } catch (err) {
+      if (err instanceof DraftValidationError) return null;
+      throw err;
+    }
+  }
+
+  // The one auto-fixable doctor repair: append the successor wikilink to a
+  // predecessor's `superseded_by:`. Mutates only that node of the parsed YAML
+  // document so untouched frontmatter keeps its original formatting (ndr:0134).
+  // Idempotent — a link that is already present is left alone.
+  async repairBackPointer(predecessorPath: string, successorWikilink: string): Promise<void> {
+    const file = path.join(this.ledger, predecessorPath);
+    const raw = await fs.readFile(file, "utf8");
+    const { yaml, body } = splitFrontmatter(raw);
+    const { doc } = parseFrontmatterYaml(yaml);
+    appendToSequence(doc, "superseded_by", successorWikilink);
+    await fs.writeFile(file, joinFrontmatter(doc.toString(), body), "utf8");
   }
 
   private async listMarkdownFiles(): Promise<string[]> {
@@ -462,22 +534,8 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort {
   }
 }
 
-// Slugs are stored in `aliases:` with an `ndr-` namespace prefix (ndr:0050),
-// but referenced without it (`ndr:#monorepo-shape`, ndr:0049). Normalize the
-// prefix away on both sides so either form matches.
-function normalizeSlug(value: string): string {
-  return value.toLowerCase().replace(/^ndr-/, "");
-}
-
 function hasAlias(atom: Atom, normalizedTarget: string): boolean {
   return atom.frontmatter.aliases.some((alias) => normalizeSlug(alias) === normalizedTarget);
-}
-
-function extractAtomIdFromWikilink(link: string): AtomId | null {
-  const cleaned = link.replace(/^\[\[|\]\]$/g, "");
-  const tail = cleaned.split("/").pop() ?? cleaned;
-  const m = /^(\d{4}|[0-9a-z]{6})(?:-|$)/.exec(tail);
-  return m ? asAtomId(m[1]!) : null;
 }
 
 function slugifyTitle(title: string): string {

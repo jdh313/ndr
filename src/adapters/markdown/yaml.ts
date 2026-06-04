@@ -33,6 +33,27 @@ function forceFlowOnEmptySeqs(doc: Document): void {
   }
 }
 
+// Append a string to a top-level sequence key of a parsed document, mutating
+// only that node — every other key keeps its source formatting. Creates the
+// key when absent; no-ops when the value is already in the sequence.
+export function appendToSequence(doc: Document.Parsed, key: string, value: string): void {
+  const contents = doc.contents;
+  if (!(contents instanceof YAMLMap)) {
+    throw new Error("frontmatter is not a YAML mapping");
+  }
+  const node = contents.get(key, true);
+  if (node instanceof YAMLSeq) {
+    const present = node.items.some((item) => item instanceof Scalar && item.value === value);
+    if (present) return;
+    node.add(doc.createNode(value));
+    // An empty `[]` parses as a flow seq; switch to block style on first entry
+    // to match the corpus convention for non-empty lists.
+    node.flow = false;
+    return;
+  }
+  doc.set(key, doc.createNode([value]));
+}
+
 function forceQuotedString(doc: Document, key: string): void {
   const contents = doc.contents;
   if (!(contents instanceof YAMLMap)) return;

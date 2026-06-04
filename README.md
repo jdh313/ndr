@@ -15,6 +15,13 @@ full capture contract: schema + taxonomy validation, vault-wide slug uniqueness,
 three-write supersession with alias handover, and locally-generated base32 ids
 (ndr:0144). It reads a draft as JSON on stdin and maps outcomes to exit codes
 0 (ok) / 1 (validation) / 2 (supersession conflict) / 3 (mid-write half-state).
+`ndr doctor` runs corpus health checks over a ledger (absorbing the
+ndr-curator agent's mechanical sweep): bidirectional supersession integrity,
+orphan refs, status coherence, alias drift, taxonomy violations, missing
+required fields, frontmatter/body drift, and malformed files. Read-only by
+default; `--fix` repairs exactly one class — missing `superseded_by`
+back-links — idempotently. Exit codes 0 (healthy) / 1 (findings) / 3 (a
+repair write failed).
 
 The library exports:
 
@@ -55,6 +62,15 @@ ndr current --area tooling --topic lint-format --verbose
 # Capture a decision atom — draft JSON on stdin, prints the written {id, path,
 # superseded, aliases_moved}. --ledger wins over the draft's vault_decisions.
 echo "$DRAFT_JSON" | ndr capture --ledger ./test/fixtures/ledger
+
+# Corpus health checks — grouped human report, exit 1 when findings exist
+ndr doctor --ledger ./test/fixtures/doctor-ledger
+
+# Structured report for machine consumers
+ndr doctor --json
+
+# Repair missing superseded_by back-links (the one auto-fixable class)
+ndr doctor --fix
 ```
 
 Brief shape, drift placement, and basename sourcing are pinned by `ndr:0136`.
