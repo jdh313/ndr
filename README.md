@@ -79,6 +79,9 @@ bun run format
 bun run typecheck
 ```
 
+CI (GitHub Actions) runs the same gates — test, lint, `format:check`,
+typecheck, plus a `bun build --compile` smoke — on every push and PR to `main`.
+
 ## Build & install
 
 `ndr` ships as a single-file binary compiled by Bun. One command builds it and
