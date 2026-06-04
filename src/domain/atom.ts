@@ -39,6 +39,22 @@ export function generateAtomId(): AtomId {
   return out as AtomId;
 }
 
+// Pull the atom-id out of a `[[Decisions/0042-some-title]]` wikilink (either id
+// shape). Returns null when the link tail doesn't start with a recognizable id.
+export function extractAtomIdFromWikilink(link: string): AtomId | null {
+  const cleaned = link.replace(/^\[\[|\]\]$/g, "");
+  const tail = cleaned.split("/").pop() ?? cleaned;
+  const m = /^(\d{4}|[0-9a-z]{6})(?:-|$)/.exec(tail);
+  return m ? asAtomId(m[1]!) : null;
+}
+
+// Slugs are stored in `aliases:` with an `ndr-` namespace prefix (ndr:0050),
+// but referenced without it (`ndr:#monorepo-shape`, ndr:0049). Normalize the
+// prefix away on both sides so either form matches.
+export function normalizeSlug(value: string): string {
+  return value.toLowerCase().replace(/^ndr-/, "");
+}
+
 export function asSlug(value: string): Slug {
   if (!/^[a-z0-9][a-z0-9-]*$/.test(value)) {
     throw new Error(`Invalid Slug: ${JSON.stringify(value)} (want kebab-case)`);

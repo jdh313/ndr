@@ -6,12 +6,14 @@ import path from "node:path";
 import {
   captureCommand,
   currentCommand,
+  doctorCommand,
   lineageCommand,
   resolveCommand,
   searchCommand,
 } from "./index.ts";
 
 const FIXTURES = path.resolve(import.meta.dir, "../../test/fixtures/ledger");
+const DOCTOR_FIXTURES = path.resolve(import.meta.dir, "../../test/fixtures/doctor-ledger");
 
 async function makeLedger(): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-cli-"));
@@ -254,6 +256,176 @@ describe("ndr capture", () => {
       expect(await fs.readdir(other)).not.toContain(parsed.path);
     } finally {
       await fs.rm(other, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("ndr doctor", () => {
+  // Every finding kind the seeded fixture corpus must fire, by check class.
+  const EXPECTED_KINDS = [
+    "missing_back_pointer",
+    "dangling_supersedes_ref",
+    "dangling_superseded_by_ref",
+    "unclaimed_supersession",
+    "dangling_superseded",
+    "status_drift",
+    "retraction_conflict",
+    "duplicate_among_current",
+    "stale_alias_on_superseded",
+    "unknown_area",
+    "unknown_topic",
+    "missing_required_fields",
+    "id_mismatch_heading",
+    "title_drift_heading",
+    "parse_error",
+    "schema_invalid",
+  ];
+
+  async function snapshotLedger(dir: string): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    for (const name of await fs.readdir(dir)) {
+      if (!name.endsWith(".md")) continue;
+      out.set(name, await fs.readFile(path.join(dir, name), "utf8"));
+    }
+    return out;
+  }
+
+  async function copyDoctorLedger(): Promise<string> {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-doctor-"));
+    await fs.cp(DOCTOR_FIXTURES, dir, { recursive: true });
+    return dir;
+  }
+
+  test("flags every check class against the fault-seeded fixture corpus", async () => {
+    const result = await doctorCommand(DOCTOR_FIXTURES);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe("");
+    for (const kind of EXPECTED_KINDS) {
+      expect(result.stdout).toContain(kind);
+    }
+    // Each finding line carries a ledger-relative path next to its kind.
+    expect(result.stdout).toContain("0002-fixable-predecessor.md  missing_back_pointer");
+    expect(result.stdout).toContain("0012-taxonomy-violation-atom.md  unknown_area");
+    // Healthy controls appear nowhere in the report.
+    expect(result.stdout).not.toContain("0001-healthy-control-atom.md  ");
+    expect(result.stdout).not.toContain("k3m9xq-base32-healthy-atom.md  ");
+    expect(result.stdout).toContain("19 files scanned; 16 finding(s); 1 repairable with --fix.");
+  });
+
+  test("without --fix the ledger is byte-identical after a run", async () => {
+    const before = await snapshotLedger(DOCTOR_FIXTURES);
+    await doctorCommand(DOCTOR_FIXTURES);
+    const after = await snapshotLedger(DOCTOR_FIXTURES);
+    expect(after).toEqual(before);
+  });
+
+  test("--json emits a parseable report mirroring the human findings", async () => {
+    const result = await doctorCommand(DOCTOR_FIXTURES, { json: true });
+    expect(result.exitCode).toBe(1);
+
+    const report = JSON.parse(result.stdout);
+    expect(report.scanned_atoms).toBe(19);
+    expect(report.taxonomy_checked).toBe(true);
+    expect(report.repair_candidates).toHaveLength(1);
+    expect(report.repairs_applied).toEqual([]);
+    expect(report.summary).toContain("16 finding(s)");
+
+    const jsonKinds = Object.values(report.issues)
+      .flat()
+      .map((f) => (f as { kind: string }).kind);
+    expect(new Set(jsonKinds)).toEqual(new Set(EXPECTED_KINDS));
+    for (const f of Object.values(report.issues).flat() as {
+      path: string;
+      kind: string;
+      detail: string;
+    }[]) {
+      expect(f.path.endsWith(".md")).toBe(true);
+      expect(f.detail.length).toBeGreaterThan(0);
+    }
+  });
+
+  test("--fix repairs the missing back-link and is idempotent", async () => {
+    const tmp = await copyDoctorLedger();
+    try {
+      const first = await doctorCommand(tmp, { fix: true });
+      expect(first.exitCode).toBe(1); // unrepairable findings remain
+      expect(first.stdout).toContain("repairs applied:");
+      expect(first.stdout).toContain(
+        "0002-fixable-predecessor.md  appended_back_pointer  [[Decisions/0003-claiming-successor]]",
+      );
+      // The repaired findings are gone from the post-fix report.
+      expect(first.stdout).not.toContain("missing_back_pointer");
+      expect(first.stdout).not.toContain("dangling_superseded ");
+      expect(first.stdout).toContain("14 finding(s)");
+
+      const patched = await fs.readFile(path.join(tmp, "0002-fixable-predecessor.md"), "utf8");
+      expect(patched).toContain("[[Decisions/0003-claiming-successor]]");
+      // Untouched frontmatter keeps its original formatting (ndr:0134).
+      expect(patched).toContain("decision_date: '2026-06-01'");
+      expect(patched).toContain("project: '[[Doctor Fixture]]'");
+
+      // Second --fix run: nothing left to repair, ledger untouched.
+      const before = await snapshotLedger(tmp);
+      const second = await doctorCommand(tmp, { fix: true });
+      expect(second.exitCode).toBe(1);
+      expect(second.stdout).not.toContain("repairs applied:");
+      expect(second.stdout).toContain("14 finding(s)");
+      expect(await snapshotLedger(tmp)).toEqual(before);
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("--fix touches only the repaired file", async () => {
+    const tmp = await copyDoctorLedger();
+    try {
+      const before = await snapshotLedger(tmp);
+      await doctorCommand(tmp, { fix: true });
+      const after = await snapshotLedger(tmp);
+      for (const [name, content] of after) {
+        if (name === "0002-fixable-predecessor.md") {
+          expect(content).not.toBe(before.get(name));
+        } else {
+          expect(content).toBe(before.get(name)!);
+        }
+      }
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("a healthy ledger reports clean and exits 0", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-doctor-healthy-"));
+    try {
+      await fs.mkdir(path.join(tmp, ".taxonomy"));
+      await fs.cp(path.join(DOCTOR_FIXTURES, ".taxonomy"), path.join(tmp, ".taxonomy"), {
+        recursive: true,
+      });
+      for (const name of ["0001-healthy-control-atom.md", "k3m9xq-base32-healthy-atom.md"]) {
+        await fs.copyFile(path.join(DOCTOR_FIXTURES, name), path.join(tmp, name));
+      }
+      const result = await doctorCommand(tmp);
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(result.stdout).toContain("2 files scanned; corpus healthy.");
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("a ledger without .taxonomy/ skips taxonomy checks with a stderr note", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-doctor-notax-"));
+    try {
+      await fs.copyFile(
+        path.join(DOCTOR_FIXTURES, "0001-healthy-control-atom.md"),
+        path.join(tmp, "0001-healthy-control-atom.md"),
+      );
+      const result = await doctorCommand(tmp);
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain("taxonomy checks skipped");
+      expect(result.stdout).toContain("corpus healthy");
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
     }
   });
 });

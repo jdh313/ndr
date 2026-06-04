@@ -10,8 +10,14 @@ import {
   MarkdownLedgerAdapter,
   SupersessionConflictError,
 } from "../adapters/markdown/adapter.ts";
-import type { Atom, AtomDraft } from "../domain/index.ts";
-import { asAtomId } from "../domain/index.ts";
+import type {
+  Atom,
+  AtomDraft,
+  CheckClass,
+  DoctorReport,
+  RepairCandidate,
+} from "../domain/index.ts";
+import { CHECK_CLASSES, asAtomId, diagnose } from "../domain/index.ts";
 
 // Both atom-id shapes (ndr:0144): legacy 4-digit and 6-char base32. Keep in
 // lockstep with ATOM_ID_PATTERN in domain/atom.ts.
@@ -93,6 +99,16 @@ export async function run(argv: readonly string[]): Promise<number> {
         );
       },
     );
+
+  program
+    .command("doctor")
+    .description("Run corpus health checks over a ledger; --fix repairs missing back-links.")
+    .option("--ledger <path>", "Ledger directory to check.", DEFAULT_LEDGER_PATH)
+    .option("--fix", "Repair missing superseded_by back-links (the one auto-fixable class).", false)
+    .option("--json", "Emit a structured JSON report instead of the human one.", false)
+    .action(async (options: { ledger: string; fix: boolean; json: boolean }) => {
+      emit(await doctorCommand(options.ledger, { fix: options.fix, json: options.json }));
+    });
 
   program
     .command("capture")
@@ -334,6 +350,169 @@ export async function captureCommand(rawJson: string, ledgerFlag?: string): Prom
     }
     throw err;
   }
+}
+
+export interface DoctorOptions {
+  readonly fix?: boolean;
+  readonly json?: boolean;
+}
+
+interface RepairApplied {
+  readonly path: string;
+  readonly kind: "appended_back_pointer";
+  readonly value: string;
+}
+
+// Corpus health checks (JUN-178, absorbing the ndr-curator agent's mechanical
+// sweep). Read-only unless --fix; --fix repairs exactly one finding class —
+// missing superseded_by back-links — then re-scans so the reported findings
+// reflect the post-repair ledger. Exit codes: 0 healthy (or all findings
+// repaired), 1 findings present, 3 a repair write failed mid-fix (ndr:0145).
+export async function doctorCommand(
+  ledgerPath: string,
+  opts: DoctorOptions = {},
+): Promise<ResolveResult> {
+  const adapter = new MarkdownLedgerAdapter(ledgerPath);
+  const taxonomy = await adapter.readTaxonomy();
+  let report = diagnose(await adapter.scanLedger(), taxonomy);
+
+  const repairsApplied: RepairApplied[] = [];
+  if (opts.fix === true) {
+    for (const candidate of report.repairCandidates) {
+      try {
+        await adapter.repairBackPointer(candidate.predecessorPath, candidate.wikilink);
+      } catch (err) {
+        return {
+          stdout: "",
+          stderr:
+            JSON.stringify(
+              {
+                error: {
+                  kind: "repair_failed",
+                  message: `repairing ${candidate.predecessorPath} failed: ${err instanceof Error ? err.message : String(err)}`,
+                  repairs_applied: repairsApplied,
+                },
+              },
+              null,
+              2,
+            ) + "\n",
+          exitCode: 3,
+        };
+      }
+      repairsApplied.push({
+        path: candidate.predecessorPath,
+        kind: "appended_back_pointer",
+        value: candidate.wikilink,
+      });
+    }
+    // Re-diagnose so the report shows what is still wrong after the repairs —
+    // this also makes a second --fix run naturally find nothing to repair.
+    if (repairsApplied.length > 0) {
+      report = diagnose(await adapter.scanLedger(), taxonomy);
+    }
+  }
+
+  const stderr = report.taxonomyChecked
+    ? ""
+    : `ndr: no readable .taxonomy/ in ${ledgerPath} — taxonomy checks skipped\n`;
+  const stdout =
+    opts.json === true
+      ? formatDoctorJson(report, ledgerPath, repairsApplied)
+      : formatDoctorReport(report, ledgerPath, repairsApplied, opts.fix === true);
+
+  return { stdout, stderr, exitCode: report.findings.length > 0 ? 1 : 0 };
+}
+
+function doctorSummary(report: DoctorReport, repairs: readonly RepairApplied[]): string {
+  if (report.findings.length === 0 && repairs.length === 0) {
+    return `${report.scanned} files scanned; corpus healthy.`;
+  }
+  const parts = [`${report.scanned} files scanned`, `${report.findings.length} finding(s)`];
+  if (report.repairCandidates.length > 0) {
+    parts.push(`${report.repairCandidates.length} repairable with --fix`);
+  }
+  if (repairs.length > 0) {
+    parts.push(`${repairs.length} repair(s) applied`);
+  }
+  return parts.join("; ") + ".";
+}
+
+const CHECK_CLASS_LABELS: Record<CheckClass, string> = {
+  chain_integrity: "chain integrity",
+  status_coherence: "status coherence",
+  alias_drift: "alias drift",
+  taxonomy: "taxonomy",
+  missing_fields: "missing required fields",
+  frontmatter_body_drift: "frontmatter/body drift",
+  malformed: "malformed",
+};
+
+function formatDoctorReport(
+  report: DoctorReport,
+  ledgerPath: string,
+  repairs: readonly RepairApplied[],
+  fix: boolean,
+): string {
+  const lines: string[] = [`ndr doctor: ${ledgerPath}`, ""];
+
+  for (const check of CHECK_CLASSES) {
+    const group = report.findings.filter((f) => f.check === check);
+    if (group.length === 0) continue;
+    lines.push(`${CHECK_CLASS_LABELS[check]}:`);
+    for (const f of group) {
+      lines.push(`  ${f.path}  ${f.kind}  ${f.detail}`);
+    }
+    lines.push("");
+  }
+
+  if (repairs.length > 0) {
+    lines.push("repairs applied:");
+    for (const r of repairs) {
+      lines.push(`  ${r.path}  ${r.kind}  ${r.value}`);
+    }
+    lines.push("");
+  }
+
+  if (!fix && report.repairCandidates.length > 0) {
+    lines.push(`run with --fix to repair ${report.repairCandidates.length} missing back-link(s)`);
+    lines.push("");
+  }
+
+  lines.push(doctorSummary(report, repairs));
+  return lines.join("\n") + "\n";
+}
+
+function formatDoctorJson(
+  report: DoctorReport,
+  ledgerPath: string,
+  repairs: readonly RepairApplied[],
+): string {
+  const issues = {} as Record<CheckClass, { path: string; kind: string; detail: string }[]>;
+  for (const check of CHECK_CLASSES) {
+    issues[check] = [];
+  }
+  for (const f of report.findings) {
+    issues[f.check].push({ path: f.path, kind: f.kind, detail: f.detail });
+  }
+  return (
+    JSON.stringify(
+      {
+        scanned_atoms: report.scanned,
+        ledger: ledgerPath,
+        taxonomy_checked: report.taxonomyChecked,
+        issues,
+        repair_candidates: report.repairCandidates.map((c: RepairCandidate) => ({
+          path: c.predecessorPath,
+          successor: c.successorPath,
+          value: c.wikilink,
+        })),
+        repairs_applied: repairs,
+        summary: doctorSummary(report, repairs),
+      },
+      null,
+      2,
+    ) + "\n"
+  );
 }
 
 function errorResult(kind: string, messages: readonly string[], exitCode: number): ResolveResult {
