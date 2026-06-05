@@ -3,15 +3,14 @@ import os from "node:os";
 import path from "node:path";
 
 // Per-repo ledger config (JUN-175). A repo opts in by placing `.ndr.toml` at
-// or above the CWD; the vault default stays zero-config (ndr:0147). Corpus
-// root is a runtime config/CWD concern, not a schema concept (ndr:0130).
+// or above the CWD — `ndr init` scaffolds it. There is no built-in default
+// ledger; a personal default is just a `.ndr.toml` higher up the walk (e.g.
+// at `~`). Corpus root is a runtime config/CWD concern, not a schema concept
+// (ndr:0130).
 export const CONFIG_BASENAME = ".ndr.toml";
 
-// Vault default: resolved at runtime from the home directory (ndr:0147).
-export const DEFAULT_LEDGER_PATH = path.join(os.homedir(), "Loose Ends", "Decisions");
-
 // A present-but-broken .ndr.toml fails loudly rather than silently falling
-// back to the vault default — same philosophy as targeted reads (ndr:0138).
+// back — same philosophy as targeted reads (ndr:0138).
 export class RepoConfigError extends Error {}
 
 export interface RepoConfig {
@@ -71,12 +70,40 @@ export function findRepoConfig(startDir: string): RepoConfig | undefined {
   }
 }
 
-// Ledger resolution order: --ledger flag > .ndr.toml walk-up from startDir >
-// vault default. (`ndr capture` additionally honors the draft payload's
-// `vault_decisions` between the flag and the walk-up — see captureCommand.)
-export function resolveLedgerPath(flag: string | undefined, startDir: string): string {
-  if (flag !== undefined) return flag;
-  const config = findRepoConfig(startDir);
-  if (config !== undefined) return config.ledger;
-  return DEFAULT_LEDGER_PATH;
+// Where a resolved ledger came from — surfaced by `ndr status` and used to
+// keep the source string in lockstep with the resolution order itself.
+export type LedgerSource =
+  | { readonly kind: "flag" }
+  | { readonly kind: "env" }
+  | { readonly kind: "config"; readonly configPath: string }
+  | { readonly kind: "none" };
+
+export interface ResolvedLedger {
+  readonly path: string;
+  readonly source: LedgerSource;
 }
+
+// Ledger resolution order: --ledger flag > NDR_LEDGER env > .ndr.toml walk-up
+// from startDir > none. (`ndr capture` additionally honors the draft payload's
+// `vault_decisions` between env and the walk-up — see captureCommand.) The
+// non-throwing core; `resolveLedgerPath` adds the error for the verbs that
+// require a ledger, `status` reports the `none` case instead.
+export function resolveLedger(flag: string | undefined, startDir: string): ResolvedLedger {
+  if (flag !== undefined) return { path: flag, source: { kind: "flag" } };
+  const env = process.env.NDR_LEDGER;
+  if (env) return { path: env, source: { kind: "env" } };
+  const config = findRepoConfig(startDir);
+  if (config !== undefined) {
+    return { path: config.ledger, source: { kind: "config", configPath: config.configPath } };
+  }
+  return { path: "", source: { kind: "none" } };
+}
+
+export function resolveLedgerPath(flag: string | undefined, startDir: string): string {
+  const resolved = resolveLedger(flag, startDir);
+  if (resolved.source.kind === "none") throw new RepoConfigError(NO_LEDGER_MESSAGE);
+  return resolved.path;
+}
+
+export const NO_LEDGER_MESSAGE =
+  "no ledger configured — run `ndr init` in the repo, or pass --ledger";

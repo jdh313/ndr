@@ -348,11 +348,14 @@ describe("MarkdownLedgerAdapter captureAtom — validation", () => {
     );
   });
 
-  test("a missing supersedes field blocks", async () => {
+  test("a missing supersedes field defaults to [] (capture-intent default)", async () => {
     const draft = makeDraft();
     delete (draft.frontmatter as Record<string, unknown>).supersedes;
     const adapter = new MarkdownLedgerAdapter(tmp);
-    await expect(adapter.captureAtom(draft)).rejects.toBeInstanceOf(DraftValidationError);
+    const result = await adapter.captureAtom(draft);
+    expect(result.superseded).toEqual([]);
+    const written = await fs.readFile(path.join(tmp, result.path), "utf8");
+    expect(written).toContain("supersedes: []");
   });
 
   test("an alias without the ndr- prefix blocks", async () => {

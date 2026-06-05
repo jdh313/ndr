@@ -7,9 +7,12 @@ import {
   captureCommand,
   currentCommand,
   doctorCommand,
+  initCommand,
   lineageCommand,
   resolveCommand,
   searchCommand,
+  statusCommand,
+  taxonomyCommand,
 } from "./index.ts";
 
 const FIXTURES = path.resolve(import.meta.dir, "../../test/fixtures/ledger");
@@ -282,6 +285,27 @@ describe("ndr capture", () => {
       await fs.rm(other, { recursive: true, force: true });
     }
   });
+
+  test("a minimal draft omitting status/supersedes/tags captures with capture-intent defaults", async () => {
+    const minimal = JSON.stringify({
+      frontmatter: {
+        title: "Minimal",
+        decision_date: "2026-06-07",
+        project: "[[t]]",
+        area: "tooling",
+        topic: "framework",
+        reversibility: "easy",
+      },
+      body: "\n# PLACEHOLDER — Minimal\n\n## Decision\n\nMinimal.\n",
+    });
+    const result = await captureCommand(minimal, tmp);
+    expect(result.exitCode).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    const written = await fs.readFile(path.join(tmp, parsed.path), "utf8");
+    expect(written).toContain("status: current");
+    expect(written).toContain("supersedes: []");
+    expect(written).toMatch(/tags:[\s\S]*decision/);
+  });
 });
 
 describe("ndr doctor", () => {
@@ -474,5 +498,266 @@ describe("ndr current", () => {
     const result = await currentCommand(FIXTURES, { area: "nonexistent" });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("no current atoms in area nonexistent");
+  });
+});
+
+describe("ndr capture without any ledger", () => {
+  test("no flag, no vault_decisions, no fallback exits 1 naming ndr init", async () => {
+    const result = await captureCommand(draftJson());
+    expect(result.exitCode).toBe(1);
+    const err = JSON.parse(result.stderr).error;
+    expect(err.kind).toBe("no_ledger");
+    expect(err.messages[0]).toContain("ndr init");
+  });
+});
+
+describe("ndr init", () => {
+  let tmp: string;
+  beforeEach(async () => {
+    tmp = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-init-"));
+  });
+  afterEach(async () => {
+    await fs.rm(tmp, { recursive: true, force: true });
+  });
+
+  test("fresh init scaffolds .ndr.toml, ledger, taxonomy, and the grounding rule", async () => {
+    const result = await initCommand(tmp);
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+
+    const toml = await fs.readFile(path.join(tmp, ".ndr.toml"), "utf8");
+    expect(toml).toContain('ledger = "./decisions"');
+    expect(toml).toContain(`project = "[[${path.basename(tmp)}]]"`);
+
+    const areas = await fs.readFile(path.join(tmp, "decisions", ".taxonomy", "areas.yaml"), "utf8");
+    expect(areas).toContain("- architecture");
+    const topics = await fs.readFile(
+      path.join(tmp, "decisions", ".taxonomy", "topics.yaml"),
+      "utf8",
+    );
+    expect(topics).toContain("- framework");
+
+    const rule = await fs.readFile(path.join(tmp, ".claude", "rules", "ndr.md"), "utf8");
+    expect(rule).toContain("# NDR coverage");
+    expect(rule).toContain("description:");
+    expect(rule).not.toContain("Loose Ends");
+  });
+
+  test("capture works immediately after init via the .ndr.toml fallback", async () => {
+    await initCommand(tmp);
+    const fallback = path.join(tmp, "decisions");
+    const capture = await captureCommand(
+      draftJson({ area: "tooling", topic: "framework" }),
+      undefined,
+      fallback,
+    );
+    expect(capture.exitCode).toBe(0);
+    const parsed = JSON.parse(capture.stdout);
+    const current = await currentCommand(fallback);
+    expect(current.stdout).toContain(parsed.id);
+  });
+
+  test("re-run skips every artifact", async () => {
+    await initCommand(tmp);
+    const result = await initCommand(tmp);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).not.toContain("created");
+    const skips = result.stdout.split("\n").filter((l) => l.startsWith("skipped"));
+    expect(skips.length).toBe(5); // .ndr.toml, decisions/, areas, topics, rules/ndr.md
+  });
+
+  test("--force rewrites .ndr.toml but never the taxonomy", async () => {
+    await initCommand(tmp);
+    await fs.writeFile(
+      path.join(tmp, "decisions", ".taxonomy", "areas.yaml"),
+      "- custom-area\n",
+      "utf8",
+    );
+    const result = await initCommand(tmp, { project: "renamed", force: true });
+    expect(result.stdout).toContain("created  .ndr.toml");
+    const toml = await fs.readFile(path.join(tmp, ".ndr.toml"), "utf8");
+    expect(toml).toContain('project = "[[renamed]]"');
+    const areas = await fs.readFile(path.join(tmp, "decisions", ".taxonomy", "areas.yaml"), "utf8");
+    expect(areas).toBe("- custom-area\n");
+  });
+
+  test("--ledger and --project overrides land in .ndr.toml", async () => {
+    const result = await initCommand(tmp, { ledger: "./docs/decisions", project: "[[custom]]" });
+    expect(result.exitCode).toBe(0);
+    const toml = await fs.readFile(path.join(tmp, ".ndr.toml"), "utf8");
+    expect(toml).toContain('ledger = "./docs/decisions"');
+    expect(toml).toContain('project = "[[custom]]"');
+    expect(await fs.exists(path.join(tmp, "docs", "decisions", ".taxonomy", "areas.yaml"))).toBe(
+      true,
+    );
+  });
+
+  test("the grounding rule is created alongside an existing CLAUDE.md without touching it", async () => {
+    await fs.mkdir(path.join(tmp, ".claude"));
+    await fs.writeFile(path.join(tmp, ".claude", "CLAUDE.md"), "# Existing content\n", "utf8");
+    const result = await initCommand(tmp);
+    expect(result.stdout).toContain("created  .claude/rules/ndr.md");
+    expect(await fs.readFile(path.join(tmp, ".claude", "CLAUDE.md"), "utf8")).toBe(
+      "# Existing content\n",
+    );
+    expect(await fs.exists(path.join(tmp, ".claude", "rules", "ndr.md"))).toBe(true);
+  });
+
+  test("an existing rule file is left untouched on re-run", async () => {
+    await initCommand(tmp);
+    const rulePath = path.join(tmp, ".claude", "rules", "ndr.md");
+    const before = await fs.readFile(rulePath, "utf8");
+    const result = await initCommand(tmp);
+    expect(result.stdout).toContain("skipped  .claude/rules/ndr.md");
+    expect(await fs.readFile(rulePath, "utf8")).toBe(before);
+  });
+});
+
+describe("read verbs --json", () => {
+  test("resolve atom-id emits a brief object with drift + lineage", async () => {
+    const result = await resolveCommand("0070", FIXTURES, { json: true });
+    expect(result.exitCode).toBe(0);
+    const brief = JSON.parse(result.stdout);
+    expect(brief.kind).toBe("brief");
+    expect(brief.drift).toBe(true);
+    expect(brief.seed_id).toBe("0070");
+    expect(brief.head_id).toBe("0102");
+    expect(brief.lineage).toEqual(["0070", "0102"]);
+    expect(brief.head.area).toBe("substrate");
+    expect(brief.references).toContain("ndr:0102");
+  });
+
+  test("resolve head atom-id has drift:false", async () => {
+    const brief = JSON.parse((await resolveCommand("0102", FIXTURES, { json: true })).stdout);
+    expect(brief.drift).toBe(false);
+    expect(brief.seed_id).toBe("0102");
+  });
+
+  test("resolve #slug follows to the head with drift:false", async () => {
+    const brief = JSON.parse((await resolveCommand("#oxc-stack", FIXTURES, { json: true })).stdout);
+    expect(brief.kind).toBe("brief");
+    expect(brief.drift).toBe(false);
+    expect(brief.head.id).toBe("0132");
+  });
+
+  test("resolve area/topic emits a list", async () => {
+    const list = JSON.parse(
+      (await resolveCommand("tooling/framework", FIXTURES, { json: true })).stdout,
+    );
+    expect(list.kind).toBe("list");
+    expect(list.count).toBe(list.atoms.length);
+    expect(list.count).toBeGreaterThan(0);
+    expect(list.atoms[0]).toHaveProperty("gist");
+  });
+
+  test("current --json count matches atoms length and excludes superseded", async () => {
+    const list = JSON.parse((await currentCommand(FIXTURES, { json: true })).stdout);
+    expect(list.kind).toBe("list");
+    expect(list.count).toBe(list.atoms.length);
+    expect(list.atoms.some((a: { id: string }) => a.id === "0070")).toBe(false);
+  });
+
+  test("search --json returns an empty list (count 0) when nothing matches", async () => {
+    const list = JSON.parse(
+      (await searchCommand("zzz-no-match-zzz", FIXTURES, { json: true })).stdout,
+    );
+    expect(list).toEqual({ kind: "list", count: 0, atoms: [] });
+  });
+
+  test("lineage --json emits the chain with statuses", async () => {
+    const out = JSON.parse((await lineageCommand("0070", FIXTURES, { json: true })).stdout);
+    expect(out.kind).toBe("lineage");
+    expect(out.head_id).toBe("0102");
+    expect(out.chain).toEqual([
+      { id: "0070", title: expect.any(String), status: "superseded" },
+      { id: "0102", title: expect.any(String), status: "current" },
+    ]);
+  });
+});
+
+describe("current summary on stderr", () => {
+  test("count goes to stderr, stdout stays a clean head list", async () => {
+    const result = await currentCommand(FIXTURES);
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toMatch(/^\d+ current atoms\n$/);
+    expect(result.stdout).not.toContain("current atoms");
+  });
+});
+
+describe("ndr areas / topics", () => {
+  let ledger: string;
+  let tmp: string;
+  beforeEach(async () => {
+    // makeLedger seeds .taxonomy/{areas,topics}.yaml directly on the ledger dir.
+    ledger = await makeLedger();
+    tmp = ledger;
+  });
+  afterEach(async () => {
+    await fs.rm(tmp, { recursive: true, force: true });
+  });
+
+  test("areas lists one per line", async () => {
+    const result = await taxonomyCommand(ledger, "areas");
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.trim().split("\n")).toContain("tooling");
+  });
+
+  test("topics --json emits a topics array", async () => {
+    const out = JSON.parse((await taxonomyCommand(ledger, "topics", { json: true })).stdout);
+    expect(Array.isArray(out.topics)).toBe(true);
+    expect(out.topics).toContain("framework");
+  });
+
+  test("missing taxonomy exits 1", async () => {
+    const bare = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-tax-"));
+    try {
+      const result = await taxonomyCommand(bare, "areas");
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(".taxonomy/areas.yaml");
+    } finally {
+      await fs.rm(bare, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("ndr status", () => {
+  let tmp: string;
+  beforeEach(async () => {
+    tmp = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-status-"));
+  });
+  afterEach(async () => {
+    await fs.rm(tmp, { recursive: true, force: true });
+  });
+
+  test("a fresh init reports the configured ledger, counts, taxonomy, and grounding", async () => {
+    await initCommand(tmp);
+    const out = JSON.parse((await statusCommand(tmp, { json: true })).stdout);
+    expect(out.version).toBeString();
+    expect(out.ledger.source).toContain(".ndr.toml");
+    expect(out.project).toBe(`[[${path.basename(tmp)}]]`);
+    expect(out.atoms).toEqual({ current: 0, total: 0 });
+    expect(out.taxonomy.areas).toBeGreaterThan(0);
+    expect(out.grounding.rule).toBe(true);
+  });
+
+  test("an unconfigured directory reports source none without throwing", async () => {
+    const out = JSON.parse((await statusCommand(tmp, { json: true })).stdout);
+    expect(out.ledger.source).toBe("none");
+    expect(out.ledger.path).toBeNull();
+    expect(out.atoms).toBeNull();
+    expect(out.grounding.rule).toBe(false);
+  });
+
+  test("human output names `ndr init` when unconfigured", async () => {
+    const result = await statusCommand(tmp);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("(none)");
+    expect(result.stdout).toContain("ndr init");
+  });
+
+  test("an explicit --ledger is reported as source flag", async () => {
+    const out = JSON.parse((await statusCommand(tmp, { ledger: FIXTURES, json: true })).stdout);
+    expect(out.ledger.source).toBe("flag");
+    expect(out.atoms.total).toBeGreaterThan(0);
   });
 });

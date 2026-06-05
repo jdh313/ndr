@@ -1,3 +1,7 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
 import { Command } from "commander";
 
 import {
@@ -8,11 +12,15 @@ import {
   SupersessionConflictError,
 } from "../adapters/markdown/adapter.ts";
 import {
-  DEFAULT_LEDGER_PATH,
+  CONFIG_BASENAME,
+  NO_LEDGER_MESSAGE,
+  type ResolvedLedger,
   RepoConfigError,
   findRepoConfig,
+  resolveLedger as resolveLedgerInfo,
   resolveLedgerPath,
 } from "./config.ts";
+import { AREAS_SEED, NDR_RULE, TOPICS_SEED, ndrTomlTemplate } from "./templates.ts";
 import type {
   Atom,
   AtomDraft,
@@ -26,7 +34,9 @@ import { CHECK_CLASSES, asAtomId, diagnose } from "../domain/index.ts";
 // lockstep with ATOM_ID_PATTERN in domain/atom.ts.
 const ATOM_ID_REF = /^(?:\d{4}|[0-9a-z]{6})$/;
 
-export { DEFAULT_LEDGER_PATH } from "./config.ts";
+const NDR_VERSION = "0.0.0";
+
+export { NO_LEDGER_MESSAGE } from "./config.ts";
 
 export interface ResolveResult {
   readonly stdout: string;
@@ -36,11 +46,16 @@ export interface ResolveResult {
 
 export interface ListOptions {
   readonly verbose?: boolean;
+  readonly json?: boolean;
 }
 
 export interface CurrentOptions extends ListOptions {
   readonly area?: string;
   readonly topic?: string;
+}
+
+function jsonResult(payload: unknown): ResolveResult {
+  return { stdout: JSON.stringify(payload, null, 2) + "\n", stderr: "", exitCode: 0 };
 }
 
 export async function run(argv: readonly string[]): Promise<number> {
@@ -49,7 +64,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   program
     .name("ndr")
     .description("Capture and resolution tooling for nested decision records.")
-    .version("0.0.0");
+    .version(NDR_VERSION);
 
   let exitCode = 0;
   const emit = (result: ResolveResult) => {
@@ -58,9 +73,9 @@ export async function run(argv: readonly string[]): Promise<number> {
     exitCode = result.exitCode;
   };
 
-  // Ledger resolution order: --ledger flag > .ndr.toml walk-up from CWD >
-  // vault default (ndr:0130, ndr:0147). A broken .ndr.toml fails loudly;
-  // null signals the action to bail after the error has been emitted.
+  // Ledger resolution order: --ledger flag > NDR_LEDGER env > .ndr.toml walk-up
+  // from CWD > error pointing at `ndr init` (ndr:0130). A broken .ndr.toml fails
+  // loudly; null signals the action to bail after the error has been emitted.
   const resolveLedger = (flag: string | undefined): string | null => {
     try {
       return resolveLedgerPath(flag, process.cwd());
@@ -76,50 +91,56 @@ export async function run(argv: readonly string[]): Promise<number> {
   program
     .command("resolve <ref>")
     .description("Resolve an ndr reference (atom-id, #slug, or area/topic) and print a brief.")
-    .option(
-      "--ledger <path>",
-      "Ledger directory to resolve against (default: .ndr.toml walk-up, then vault).",
-    )
+    .option("--ledger <path>", "Ledger directory to resolve against (default: .ndr.toml walk-up).")
     .option("--verbose", "Expand multi-atom results to full briefs.", false)
-    .action(async (ref: string, options: { ledger?: string; verbose: boolean }) => {
+    .option("--json", "Emit structured JSON instead of the human brief.", false)
+    .action(async (ref: string, options: { ledger?: string; verbose: boolean; json: boolean }) => {
       const ledger = resolveLedger(options.ledger);
       if (ledger === null) return;
-      emit(await resolveCommand(ref, ledger, { verbose: options.verbose }));
+      emit(await resolveCommand(ref, ledger, { verbose: options.verbose, json: options.json }));
     });
 
   program
     .command("search <query>")
     .description("Free-text search across atom title and body.")
-    .option(
-      "--ledger <path>",
-      "Ledger directory to search (default: .ndr.toml walk-up, then vault).",
-    )
+    .option("--ledger <path>", "Ledger directory to search (default: .ndr.toml walk-up).")
     .option("--verbose", "Expand results to full briefs.", false)
-    .action(async (query: string, options: { ledger?: string; verbose: boolean }) => {
-      const ledger = resolveLedger(options.ledger);
-      if (ledger === null) return;
-      emit(await searchCommand(query, ledger, { verbose: options.verbose }));
-    });
+    .option("--json", "Emit structured JSON instead of the human list.", false)
+    .action(
+      async (query: string, options: { ledger?: string; verbose: boolean; json: boolean }) => {
+        const ledger = resolveLedger(options.ledger);
+        if (ledger === null) return;
+        emit(await searchCommand(query, ledger, { verbose: options.verbose, json: options.json }));
+      },
+    );
 
   program
     .command("lineage <id>")
     .description("Walk the supersession chain from an atom-id to its head.")
-    .option("--ledger <path>", "Ledger directory to walk (default: .ndr.toml walk-up, then vault).")
-    .action(async (id: string, options: { ledger?: string }) => {
+    .option("--ledger <path>", "Ledger directory to walk (default: .ndr.toml walk-up).")
+    .option("--json", "Emit structured JSON instead of the human chain.", false)
+    .action(async (id: string, options: { ledger?: string; json: boolean }) => {
       const ledger = resolveLedger(options.ledger);
       if (ledger === null) return;
-      emit(await lineageCommand(id, ledger));
+      emit(await lineageCommand(id, ledger, { json: options.json }));
     });
 
   program
     .command("current")
     .description("List all current atoms, optionally filtered by area and/or topic.")
-    .option("--ledger <path>", "Ledger directory to list (default: .ndr.toml walk-up, then vault).")
+    .option("--ledger <path>", "Ledger directory to list (default: .ndr.toml walk-up).")
     .option("--area <area>", "Restrict to a single area.")
     .option("--topic <topic>", "Restrict to a single topic.")
     .option("--verbose", "Expand results to full briefs.", false)
+    .option("--json", "Emit structured JSON instead of the human list.", false)
     .action(
-      async (options: { ledger?: string; area?: string; topic?: string; verbose: boolean }) => {
+      async (options: {
+        ledger?: string;
+        area?: string;
+        topic?: string;
+        verbose: boolean;
+        json: boolean;
+      }) => {
         const ledger = resolveLedger(options.ledger);
         if (ledger === null) return;
         emit(
@@ -127,6 +148,7 @@ export async function run(argv: readonly string[]): Promise<number> {
             area: options.area,
             topic: options.topic,
             verbose: options.verbose,
+            json: options.json,
           }),
         );
       },
@@ -135,10 +157,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   program
     .command("doctor")
     .description("Run corpus health checks over a ledger; --fix repairs missing back-links.")
-    .option(
-      "--ledger <path>",
-      "Ledger directory to check (default: .ndr.toml walk-up, then vault).",
-    )
+    .option("--ledger <path>", "Ledger directory to check (default: .ndr.toml walk-up).")
     .option("--fix", "Repair missing superseded_by back-links (the one auto-fixable class).", false)
     .option("--json", "Emit a structured JSON report instead of the human one.", false)
     .action(async (options: { ledger?: string; fix: boolean; json: boolean }) => {
@@ -148,20 +167,68 @@ export async function run(argv: readonly string[]): Promise<number> {
     });
 
   program
-    .command("capture")
-    .description("Capture a decision atom from a draft read as JSON on stdin.")
+    .command("status")
+    .description("Report how ndr is wired up in this repo: ledger, taxonomy, atoms, grounding.")
+    .option("--ledger <path>", "Ledger directory to inspect (default: .ndr.toml walk-up).")
+    .option("--json", "Emit a structured JSON status report.", false)
+    .action(async (options: { ledger?: string; json: boolean }) => {
+      emit(await statusCommand(process.cwd(), { ledger: options.ledger, json: options.json }));
+    });
+
+  for (const axis of ["areas", "topics"] as const) {
+    program
+      .command(axis)
+      .description(`List the ${axis} in the resolved ledger's taxonomy.`)
+      .option("--ledger <path>", "Ledger directory to read (default: .ndr.toml walk-up).")
+      .option("--json", "Emit a structured JSON list.", false)
+      .action(async (options: { ledger?: string; json: boolean }) => {
+        const ledger = resolveLedger(options.ledger);
+        if (ledger === null) return;
+        emit(await taxonomyCommand(ledger, axis, { json: options.json }));
+      });
+  }
+
+  program
+    .command("init")
+    .description(
+      "Initialize the current repo for ndr: .ndr.toml, ledger, taxonomy, .claude/rules/ndr.md.",
+    )
+    .option("--ledger <path>", "Ledger directory to pin in .ndr.toml.", "./decisions")
+    .option(
+      "--project <name>",
+      "Project name for the .ndr.toml wikilink (default: directory name).",
+    )
+    .option(
+      "--force",
+      "Overwrite an existing .ndr.toml (taxonomy files are never overwritten).",
+      false,
+    )
+    .action(async (options: { ledger: string; project?: string; force: boolean }) => {
+      emit(
+        await initCommand(process.cwd(), {
+          ledger: options.ledger,
+          project: options.project,
+          force: options.force,
+        }),
+      );
+    });
+
+  program
+    .command("capture [file]")
+    .description("Capture a decision atom from a draft JSON file (or stdin if omitted).")
     .option(
       "--ledger <path>",
       "Ledger directory to write to (wins over the draft's vault_decisions).",
     )
-    .action(async (options: { ledger?: string }) => {
-      const raw = await readStdin();
-      // Precedence: flag > draft vault_decisions > .ndr.toml walk-up > vault
-      // default. The walk-up runs eagerly so a broken .ndr.toml fails loudly
-      // even when the draft carries its own ledger.
-      let fallback: string;
+    .action(async (file: string | undefined, options: { ledger?: string }) => {
+      const raw = file !== undefined ? await fs.readFile(file, "utf8") : await readStdin();
+      // Precedence: flag > NDR_LEDGER env > draft vault_decisions > .ndr.toml
+      // walk-up > error. The walk-up runs eagerly so a broken .ndr.toml fails
+      // loudly even when the draft carries its own ledger.
+      const flagOrEnv = options.ledger ?? process.env.NDR_LEDGER;
+      let fallback: string | undefined;
       try {
-        fallback = findRepoConfig(process.cwd())?.ledger ?? DEFAULT_LEDGER_PATH;
+        fallback = findRepoConfig(process.cwd())?.ledger;
       } catch (err) {
         if (err instanceof RepoConfigError) {
           emit({ stdout: "", stderr: `${err.message}\n`, exitCode: 1 });
@@ -169,7 +236,7 @@ export async function run(argv: readonly string[]): Promise<number> {
         }
         throw err;
       }
-      emit(await captureCommand(raw, options.ledger, fallback));
+      emit(await captureCommand(raw, flagOrEnv, fallback));
     });
 
   await program.parseAsync([...argv]);
@@ -182,15 +249,16 @@ export async function resolveCommand(
   opts: ListOptions = {},
 ): Promise<ResolveResult> {
   const adapter = new MarkdownLedgerAdapter(ledgerPath);
+  const json = opts.json ?? false;
 
   if (ref.startsWith("#")) {
-    return await resolveSlug(adapter, ref.slice(1), ledgerPath);
+    return await resolveSlug(adapter, ref.slice(1), ledgerPath, json);
   }
   if (ref.includes("/")) {
-    return await resolveTopic(adapter, ref, ledgerPath, opts.verbose ?? false);
+    return await resolveTopic(adapter, ref, ledgerPath, opts.verbose ?? false, json);
   }
   if (ATOM_ID_REF.test(ref)) {
-    return await resolveAtomId(adapter, ref, ledgerPath);
+    return await resolveAtomId(adapter, ref, ledgerPath, json);
   }
   return {
     stdout: "",
@@ -203,6 +271,7 @@ async function resolveAtomId(
   adapter: MarkdownLedgerAdapter,
   ref: string,
   ledgerPath: string,
+  json: boolean,
 ): Promise<ResolveResult> {
   let chain: Atom[];
   try {
@@ -220,6 +289,7 @@ async function resolveAtomId(
 
   const head = chain[chain.length - 1]!;
   const headFilename = await adapter.getAtomFilename(asAtomId(head.frontmatter.id));
+  if (json) return jsonResult(briefJson(chain, headFilename));
   return { stdout: formatBrief(chain, headFilename), stderr: "", exitCode: 0 };
 }
 
@@ -227,6 +297,7 @@ async function resolveSlug(
   adapter: MarkdownLedgerAdapter,
   slug: string,
   ledgerPath: string,
+  json: boolean,
 ): Promise<ResolveResult> {
   if (slug.length === 0) {
     return { stdout: "", stderr: "empty slug reference — use #<slug>\n", exitCode: 1 };
@@ -244,6 +315,7 @@ async function resolveSlug(
   // A slug tracks forward to the head, so there is no drift to surface
   // (ndr:0049, ndr:0050) — render the head alone.
   const headFilename = await adapter.getAtomFilename(asAtomId(head.frontmatter.id));
+  if (json) return jsonResult(briefJson([head], headFilename));
   return { stdout: formatBrief([head], headFilename), stderr: "", exitCode: 0 };
 }
 
@@ -252,6 +324,7 @@ async function resolveTopic(
   ref: string,
   ledgerPath: string,
   verbose: boolean,
+  json: boolean,
 ): Promise<ResolveResult> {
   const parts = ref.split("/");
   if (parts.length !== 2 || parts[0]!.length === 0 || parts[1]!.length === 0) {
@@ -265,6 +338,7 @@ async function resolveTopic(
   const [area, topic] = parts as [string, string];
   const atoms = await adapter.listCurrent({ area, topic });
   if (atoms.length === 0) {
+    if (json) return jsonResult({ kind: "list", count: 0, atoms: [] });
     return {
       stdout: "",
       stderr: `no current atoms for ${area}/${topic} in ledger ${ledgerPath}\n`,
@@ -272,6 +346,7 @@ async function resolveTopic(
     };
   }
 
+  if (json) return jsonResult(await listJson(atoms, adapter));
   return { stdout: await formatAtomList(atoms, verbose, adapter), stderr: "", exitCode: 0 };
 }
 
@@ -282,11 +357,12 @@ export async function searchCommand(
 ): Promise<ResolveResult> {
   const adapter = new MarkdownLedgerAdapter(ledgerPath);
   const atoms = await adapter.searchFreeText(query);
+  const sorted = [...atoms].sort((a, b) => a.frontmatter.id.localeCompare(b.frontmatter.id));
+  if (opts.json) return jsonResult(await listJson(sorted, adapter));
   if (atoms.length === 0) {
     return { stdout: `no atoms match ${JSON.stringify(query)}\n`, stderr: "", exitCode: 0 };
   }
 
-  const sorted = [...atoms].sort((a, b) => a.frontmatter.id.localeCompare(b.frontmatter.id));
   return {
     stdout: await formatAtomList(sorted, opts.verbose ?? false, adapter),
     stderr: "",
@@ -294,7 +370,11 @@ export async function searchCommand(
   };
 }
 
-export async function lineageCommand(ref: string, ledgerPath: string): Promise<ResolveResult> {
+export async function lineageCommand(
+  ref: string,
+  ledgerPath: string,
+  opts: ListOptions = {},
+): Promise<ResolveResult> {
   if (!ATOM_ID_REF.test(ref)) {
     return {
       stdout: "",
@@ -318,6 +398,17 @@ export async function lineageCommand(ref: string, ledgerPath: string): Promise<R
     throw err;
   }
 
+  if (opts.json) {
+    return jsonResult({
+      kind: "lineage",
+      head_id: chain[chain.length - 1]!.frontmatter.id,
+      chain: chain.map((a) => ({
+        id: a.frontmatter.id,
+        title: a.frontmatter.title,
+        status: a.frontmatter.status,
+      })),
+    });
+  }
   return { stdout: formatLineage(chain), stderr: "", exitCode: 0 };
 }
 
@@ -327,6 +418,7 @@ export async function currentCommand(
 ): Promise<ResolveResult> {
   const adapter = new MarkdownLedgerAdapter(ledgerPath);
   const atoms = await adapter.listCurrent({ area: opts.area, topic: opts.topic });
+  if (opts.json) return jsonResult(await listJson(atoms, adapter));
   if (atoms.length === 0) {
     return {
       stdout: `no current atoms${describeScope(opts.area, opts.topic)}\n`,
@@ -335,23 +427,239 @@ export async function currentCommand(
     };
   }
 
+  // The count goes to stderr so stdout stays a clean head list for the skills
+  // that parse it; the user still sees the summary in the terminal.
+  const noun = atoms.length === 1 ? "atom" : "atoms";
   return {
     stdout: await formatAtomList(atoms, opts.verbose ?? false, adapter),
-    stderr: "",
+    stderr: `${atoms.length} current ${noun}${describeScope(opts.area, opts.topic)}\n`,
     exitCode: 0,
   };
+}
+
+export interface TaxonomyOptions {
+  readonly json?: boolean;
+}
+
+// List one taxonomy axis (areas | topics) for the resolved ledger. Reuses the
+// adapter's doctor-grade reader, which returns null when the taxonomy is
+// missing/unreadable — here that is a hard error (exit 1) since the verb's whole
+// job is to print the list.
+export async function taxonomyCommand(
+  ledgerPath: string,
+  axis: "areas" | "topics",
+  opts: TaxonomyOptions = {},
+): Promise<ResolveResult> {
+  const adapter = new MarkdownLedgerAdapter(ledgerPath);
+  const taxonomy = await adapter.readTaxonomy();
+  if (taxonomy === null) {
+    return {
+      stdout: "",
+      stderr: `no taxonomy in ledger ${ledgerPath} — expected .taxonomy/${axis}.yaml\n`,
+      exitCode: 1,
+    };
+  }
+  const values = taxonomy[axis];
+  if (opts.json) return jsonResult({ [axis]: values });
+  return { stdout: values.join("\n") + "\n", stderr: "", exitCode: 0 };
+}
+
+export interface StatusOptions {
+  readonly ledger?: string;
+  readonly json?: boolean;
+}
+
+// Report how ndr is wired up at `cwd`: which ledger resolves and from where,
+// atom counts, taxonomy presence, and whether the grounding marker exists.
+// Unlike the read verbs this never throws on an unconfigured repo — reporting
+// "none" is the whole point.
+export async function statusCommand(cwd: string, opts: StatusOptions = {}): Promise<ResolveResult> {
+  const resolved: ResolvedLedger = resolveLedgerInfo(opts.ledger, cwd);
+  const config = findRepoConfigSafe(cwd);
+  const project = config?.project;
+
+  // Atom counts + taxonomy, guarded for a missing/empty ledger dir.
+  let atoms: { current: number; total: number } | null = null;
+  let taxonomy: { areas: number; topics: number } | null = null;
+  if (resolved.source.kind !== "none") {
+    const adapter = new MarkdownLedgerAdapter(resolved.path);
+    try {
+      const scan = await adapter.scanLedger();
+      atoms = {
+        current: scan.atoms.filter((a) => a.frontmatter.status === "current").length,
+        total: scan.atoms.length,
+      };
+    } catch {
+      atoms = null; // ledger dir missing or unreadable
+    }
+    const tax = await adapter.readTaxonomy();
+    if (tax !== null) taxonomy = { areas: tax.areas.length, topics: tax.topics.length };
+  }
+
+  // Grounding markers (fs checks at cwd).
+  const ruleExists = await exists(path.join(cwd, ".claude", "rules", "ndr.md"));
+  const claudeMdPath = path.join(cwd, ".claude", "CLAUDE.md");
+  const claudeMd = (await exists(claudeMdPath))
+    ? (await fs.readFile(claudeMdPath, "utf8")).includes("NDR coverage")
+    : false;
+
+  if (opts.json) {
+    return jsonResult({
+      version: NDR_VERSION,
+      ledger: { path: resolved.path || null, source: ledgerSourceLabel(resolved) },
+      project: project ?? null,
+      atoms,
+      taxonomy,
+      grounding: { rule: ruleExists, claude_md: claudeMd },
+    });
+  }
+
+  const lines: string[] = [`ndr ${NDR_VERSION}`];
+  if (resolved.source.kind === "none") {
+    lines.push("ledger:    (none) — run `ndr init` or pass --ledger");
+  } else {
+    lines.push(`ledger:    ${resolved.path}  (source: ${ledgerSourceLabel(resolved)})`);
+    if (project) lines.push(`project:   ${project}`);
+    lines.push(
+      `atoms:     ${atoms ? `${atoms.current} current / ${atoms.total} total` : "ledger directory missing"}`,
+    );
+    lines.push(
+      `taxonomy:  ${taxonomy ? `${taxonomy.areas} areas, ${taxonomy.topics} topics` : "missing"}`,
+    );
+  }
+  const grounding = ruleExists
+    ? ".claude/rules/ndr.md present"
+    : claudeMd
+      ? ".claude/CLAUDE.md NDR section present"
+      : "not wired (run `ndr init`)";
+  lines.push(`grounding: ${grounding}`);
+  return { stdout: lines.join("\n") + "\n", stderr: "", exitCode: 0 };
+}
+
+function ledgerSourceLabel(resolved: ResolvedLedger): string {
+  switch (resolved.source.kind) {
+    case "flag":
+      return "flag";
+    case "env":
+      return "env NDR_LEDGER";
+    case "config":
+      return `.ndr.toml ${resolved.source.configPath}`;
+    case "none":
+      return "none";
+  }
+}
+
+// A present-but-broken .ndr.toml should not crash `status`; swallow the parse
+// error and report as unconfigured-project.
+function findRepoConfigSafe(cwd: string): ReturnType<typeof findRepoConfig> {
+  try {
+    return findRepoConfig(cwd);
+  } catch {
+    return undefined;
+  }
+}
+
+export interface InitOptions {
+  readonly ledger?: string;
+  readonly project?: string;
+  readonly force?: boolean;
+}
+
+// Scaffold a repo's NDR opt-in: `.ndr.toml`, the ledger directory with a
+// starter `.taxonomy/`, and the grounding snippet in `.claude/CLAUDE.md`.
+// Idempotent — existing artifacts are skipped (`--force` rewrites `.ndr.toml`
+// only; taxonomy files are user data and never overwritten). Plain fs, not the
+// adapter: this is scaffolding, not atom corpus access (ndr:0133).
+export async function initCommand(cwd: string, opts: InitOptions = {}): Promise<ResolveResult> {
+  const root = path.resolve(cwd);
+  const ledgerValue = opts.ledger ?? "./decisions";
+  const projectName = opts.project ?? path.basename(root);
+  const project = projectName.startsWith("[[") ? projectName : `[[${projectName}]]`;
+
+  // Mirror parseRepoConfig's path semantics: `~/` expands, relative paths
+  // resolve against the config file's directory (the repo root here).
+  const expanded = ledgerValue.startsWith("~/")
+    ? path.join(os.homedir(), ledgerValue.slice(2))
+    : ledgerValue;
+  const ledgerAbs = path.isAbsolute(expanded) ? expanded : path.resolve(root, expanded);
+
+  const lines: string[] = [];
+  const report = (action: "created" | "skipped", target: string, note = "") => {
+    lines.push(`${action}  ${target}${note ? ` ${note}` : ""}`);
+  };
+
+  try {
+    // 1. .ndr.toml at the repo root.
+    const configPath = path.join(root, CONFIG_BASENAME);
+    const configExists = await exists(configPath);
+    if (configExists && !opts.force) {
+      report("skipped", CONFIG_BASENAME, "(exists; --force overwrites)");
+    } else {
+      await fs.writeFile(configPath, ndrTomlTemplate(ledgerValue, project), "utf8");
+      report("created", CONFIG_BASENAME);
+    }
+
+    // 2. Ledger directory + starter taxonomy.
+    const ledgerLabel = path.relative(root, ledgerAbs) || ".";
+    if (await exists(ledgerAbs)) {
+      report("skipped", `${ledgerLabel}/`, "(exists)");
+    } else {
+      await fs.mkdir(ledgerAbs, { recursive: true });
+      report("created", `${ledgerLabel}/`);
+    }
+    const taxonomyDir = path.join(ledgerAbs, ".taxonomy");
+    await fs.mkdir(taxonomyDir, { recursive: true });
+    for (const [basename, seed] of [
+      ["areas.yaml", AREAS_SEED],
+      ["topics.yaml", TOPICS_SEED],
+    ] as const) {
+      const target = path.join(taxonomyDir, basename);
+      if (await exists(target)) {
+        report("skipped", path.join(ledgerLabel, ".taxonomy", basename), "(exists)");
+      } else {
+        await fs.writeFile(target, seed, "utf8");
+        report("created", path.join(ledgerLabel, ".taxonomy", basename));
+      }
+    }
+
+    // 3. Grounding rule in .claude/rules/ndr.md. Claude Code auto-loads it at
+    // session start; a standalone file makes idempotency a plain existence
+    // check and keeps the repo's main CLAUDE.md untouched.
+    const rulePath = path.join(root, ".claude", "rules", "ndr.md");
+    if (await exists(rulePath)) {
+      report("skipped", ".claude/rules/ndr.md", "(exists)");
+    } else {
+      await fs.mkdir(path.dirname(rulePath), { recursive: true });
+      await fs.writeFile(rulePath, NDR_RULE, "utf8");
+      report("created", ".claude/rules/ndr.md");
+    }
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    return errorResult("init_failed", [detail], 1);
+  }
+
+  return { stdout: lines.join("\n") + "\n", stderr: "", exitCode: 0 };
+}
+
+async function exists(target: string): Promise<boolean> {
+  try {
+    await fs.access(target);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // Capture a decision atom. `rawJson` is the draft read from stdin; `ledgerFlag`
 // is the --ledger value if the user passed one. Ledger precedence: flag wins,
 // then the draft's `vault_decisions`, then `fallbackLedger` (the .ndr.toml
-// walk-up result or the vault default, resolved by the caller). Outcomes map
-// to exit codes 0 (ok) / 1 (validation) / 2 (supersession conflict) / 3
-// (half-state).
+// walk-up result, resolved by the caller); with none of the three the capture
+// errors. Outcomes map to exit codes 0 (ok) / 1 (validation) / 2 (supersession
+// conflict) / 3 (half-state).
 export async function captureCommand(
   rawJson: string,
   ledgerFlag?: string,
-  fallbackLedger: string = DEFAULT_LEDGER_PATH,
+  fallbackLedger?: string,
 ): Promise<ResolveResult> {
   let payload: unknown;
   try {
@@ -370,6 +678,9 @@ export async function captureCommand(
   const p = payload as Record<string, unknown>;
   const ledgerPath =
     ledgerFlag ?? (typeof p.vault_decisions === "string" ? p.vault_decisions : fallbackLedger);
+  if (ledgerPath === undefined) {
+    return errorResult("no_ledger", [NO_LEDGER_MESSAGE], 1);
+  }
 
   if (typeof p.frontmatter !== "object" || p.frontmatter === null) {
     return errorResult("bad_input", ["`frontmatter` must be an object"], 1);
@@ -585,6 +896,54 @@ async function readStdin(): Promise<string> {
     chunks.push(chunk as Buffer);
   }
   return Buffer.concat(chunks).toString("utf8");
+}
+
+// Structured JSON output for the read verbs (--json). Complements the pinned
+// human brief (ndr:0136) so skills and other library consumers parse data
+// instead of formatted text. `references` mirrors the brief's References block.
+function atomReferences(fm: Atom["frontmatter"]): string[] {
+  return [`ndr:${fm.id}`, ...fm.aliases.map((a) => `ndr:#${a}`), `ndr:${fm.area}/${fm.topic}`];
+}
+
+function atomSummary(atom: Atom, filename: string | null): Record<string, unknown> {
+  const fm = atom.frontmatter;
+  return {
+    id: fm.id,
+    title: fm.title,
+    area: fm.area,
+    topic: fm.topic,
+    status: fm.status,
+    decision_date: formatDate(fm.decision_date),
+    reversibility: fm.reversibility,
+    path: filename ? filename.replace(/\.md$/, "") : null,
+    gist: extractGist(atom.body),
+  };
+}
+
+function briefJson(chain: readonly Atom[], headFilename: string | null): Record<string, unknown> {
+  const seed = chain[0]!;
+  const head = chain[chain.length - 1]!;
+  return {
+    kind: "brief",
+    drift: seed.frontmatter.id !== head.frontmatter.id,
+    seed_id: seed.frontmatter.id,
+    head_id: head.frontmatter.id,
+    head: atomSummary(head, headFilename),
+    lineage: chain.map((a) => a.frontmatter.id),
+    references: atomReferences(head.frontmatter),
+  };
+}
+
+async function listJson(
+  atoms: readonly Atom[],
+  adapter: MarkdownLedgerAdapter,
+): Promise<Record<string, unknown>> {
+  const summaries = await Promise.all(
+    atoms.map(async (a) =>
+      atomSummary(a, await adapter.getAtomFilename(asAtomId(a.frontmatter.id))),
+    ),
+  );
+  return { kind: "list", count: summaries.length, atoms: summaries };
 }
 
 export function formatBrief(chain: readonly Atom[], headFilename: string | null): string {
