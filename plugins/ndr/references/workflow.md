@@ -1,6 +1,6 @@
 # Workflow
 
-How `/capture-decision`, `/decisions`, and `/ground` interact, end-to-end. All NDR corpus operations route through the `ndr` CLI (ndr:0129) — the CLI walks supersession chains in-process, so no skill or agent ever re-implements the walk.
+How `/capture-decision`, `/decisions`, `/ground`, and the audit surfaces (`/drift-check`, `@ndr-curator`) interact, end-to-end. All NDR corpus operations route through the `ndr` CLI (ndr:0129) — the CLI walks supersession chains in-process, so no skill or agent ever re-implements the walk.
 
 ## The `ndr` CLI
 
@@ -13,7 +13,7 @@ The shared substrate for both flows. Installed via `bun run install:bin` in `~/P
 | `ndr current [--area] [--topic]` | List current heads, optionally filtered |
 | `ndr lineage <id>` | Walk a supersession chain explicitly |
 | `ndr capture` | Write path — single atom draft as JSON on stdin |
-| `ndr doctor [--fix]` | Corpus health checks |
+| `ndr doctor [--fix] [--json]` | Corpus health checks; exit 1 when findings present; `--fix` repairs missing back-links; `--json` for machine consumers |
 
 ### Ledger resolution
 
@@ -37,7 +37,8 @@ The vault default keeps the common case zero-config (ndr:0147); the repo file is
 
 - **Briefs (read verbs)** are pinned by ndr:0136: title + ledger-relative basename, area/topic/decision line, reversibility, body gist, `Lineage:` chain, `References:` block, and a `Drift:` line prepended when the seed was superseded. Skills present this output **verbatim** — never reconstruct it. Assumption callouts are deliberately omitted from CLI output; readers pull them from the **head** file when relevant.
 - **Capture results** are pinned by ndr:0146: exit 0 prints `{id, path, superseded, aliases_moved}` on stdout; exits 1/2/3 print a JSON error on stderr and never populate stdout. Consumers branch on the exit code before parsing.
-- **Errors** (ndr:0138): corpus-wide verbs skip malformed atoms with a stderr warning; targeted reads (`resolve <id>`) fail hard. A non-zero exit is surfaced to the user, never swallowed.
+- **Errors** (ndr:0154): corpus-wide verbs skip malformed atoms with a stderr warning — `ndr doctor` is the dedicated surface that reports them; targeted reads (`resolve <id>`) fail hard. A non-zero exit is surfaced to the user, never swallowed.
+- **Doctor reports** (ndr:0152): `ndr doctor --json` emits `{scanned_atoms, ledger, taxonomy_checked, issues{chain_integrity, status_coherence, alias_drift, taxonomy, missing_fields, frontmatter_body_drift, malformed}, repair_candidates, repairs_applied, summary}`. Exit codes: 0 healthy/repaired, 1 findings present, 3 repair write failure.
 
 ## Capture flow
 
@@ -144,6 +145,42 @@ The two skills share the CLI and the reader but differ in who supplies the scope
 ### Why skill + agent split (not just an agent)
 
 Subagents don't see the skills list. The orchestrator does — its always-visible reminder block carries each skill's frontmatter description. That's the primary "Claude knows when to invoke this" mechanism. An agent alone, with no skill, would have a much weaker activation path: agent descriptions are only visible to agents that have Agent-tool access *and* are actively scanning. The skill provides the trigger surface; the agent provides the isolated context for fuzzy-scope work. This is the same shape `librarian:meeting-followup` + `librarian:vault-reader` use.
+
+## Audit flow
+
+Two complementary audits, both CLI-backed (deterministic detection) with LLM-facing interpretation in agents (ndr:0152):
+
+| Surface | Question | Mechanical layer | LLM layer |
+| --- | --- | --- | --- |
+| `/drift-check` → `@ndr-drift-auditor` | does the code still match the decisions? | `ndr current --verbose` enumerates heads | semantic code-vs-decision compare; three resolutions per divergence |
+| `@ndr-curator` | is the corpus itself healthy? | `ndr doctor --json` (+ `--fix`) runs every check | grouping, severity ranking, next actions |
+
+### Drift check
+
+```
+scope + ledger resolution (skill) ──► @ndr-drift-auditor: ndr current --verbose ──► Read head files ──► compare vs diff ──► punch list
+```
+
+- The skill resolves the diff scope (never silently defaulted) and the ledger (`.ndr.toml` walk-up, then vault default), and passes both to the agent.
+- The agent enumerates via `ndr current --verbose` — heads-only filtering and the supersession walk happen in-process; the agent never re-filters.
+- Full bodies (Decision / Consequences / `## Assumptions` callouts) come from `Read`ing head files — briefs carry only the gist (ndr:0136). Heads are safe to read; seeds are not.
+- The compare itself — does this diff violate a Decision, trip a `Revisit if:`, invalidate a Consequence — is LLM work and stays in the agent.
+- Output: per-atom divergences, three labeled resolutions each (amend / supersede / revert). Read-only; the human ratifies via `/capture-decision` or a code edit.
+
+### Corpus health
+
+```
+@ndr-curator: ndr doctor --json [--fix] ──► interpret findings ──► health report
+```
+
+- Every check definition lives in the CLI: chain integrity, status coherence, alias drift, taxonomy, missing fields, frontmatter/body drift, malformed files. The agent never re-implements one.
+- `--fix` repairs exactly one class — missing `superseded_by:` back-links — idempotently. Everything else is human work, and the report says which kind.
+- Malformed atoms are doctor's surface (ndr:0154): bulk-read verbs skip them to keep result sets usable; doctor reports them so nothing stays invisible.
+- The agent's value-add is interpretation: grouping by class, severity ranking (supersession-primitive damage first), concrete next actions.
+
+### Division of labor
+
+Deterministic detection belongs in the CLI — typed, tested, one implementation (ndr:0152). Judgment stays in the agents: "does this diff contradict that decision?" (drift-auditor) and "what should a human fix first?" (curator). If a check seems missing from doctor, the agent says so in its report rather than hand-rolling it against the ledger.
 
 ## Reference convention
 

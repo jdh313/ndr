@@ -1,6 +1,6 @@
 ---
 name: drift-check
-description: On-demand audit of code against current `~/Loose Ends/Decisions/` atoms. Use when the user says "drift check", "ndr drift check", "audit decisions against code", "are my decisions still accurate", "ndr coherence check", or asks for an audit of the durable decision layer against current implementation. Walks the supersession chain to current heads, compares each against a user-chosen diff scope (working tree, branch range, commit range, or full repo), and surfaces divergences with three resolutions per item — amend, supersede, or revert. Read-only — never edits atoms or code.
+description: On-demand audit of code against current decision heads. Use when the user says "drift check", "ndr drift check", "audit decisions against code", "are my decisions still accurate", "ndr coherence check", or asks for an audit of the durable decision layer against current implementation. Enumerates current heads via the `ndr` CLI, compares each against a user-chosen diff scope (working tree, branch range, commit range, or full repo), and surfaces divergences with three resolutions per item — amend, supersede, or revert. Read-only — never edits atoms or code.
 argument-hint: "[scope: working-tree | <base>...HEAD | HEAD~N..HEAD | full-repo]"
 allowed-tools:
   - Bash
@@ -12,13 +12,13 @@ allowed-tools:
 
 ## Overview
 
-Run a drift check between the current repo's code and the current heads of `~/Loose Ends/Decisions/` atoms. Dispatches the `ndr-drift-auditor` agent for the walk-and-compare and renders its structured report as a human-facing punch list.
+Run a drift check between the current repo's code and the current heads of the resolved decision ledger. Dispatches the `ndr-drift-auditor` agent for the enumerate-and-compare and renders its structured report as a human-facing punch list.
 
-This skill encodes the **code-vs-decision coherence check** for ndr — complementary to `ndr-curator` (which checks corpus health between atoms) and `ndr-reviewer` (which checks individual atom shape).
+This skill encodes the **code-vs-decision coherence check** for ndr — complementary to `ndr-curator` (which reports corpus health via `ndr doctor`) and `ndr-reviewer` (which checks individual atom shape).
 
-## Vault tool usage
+## Tool usage
 
-Per NDR atom 0100, vault tool calls follow a layered stack: `obsidian-cli` primary, tier-2 MCP for the explicitly-blessed operations. For this skill: the drift-check orchestrator does not read vault files directly — atom reads happen inside `ndr-drift-auditor`. That agent should use `obsidian-cli files Decisions/` to enumerate heads and `obsidian-cli read file=<path>` to load individual atoms; `mcp__obsidian-mcp__search_notes` (with `searchFrontmatter: true`) is available as a tier-2 fallback for frontmatter-based filtering if needed. This skill uses `Bash` for diff resolution and `Task` for agent dispatch. Atom file creation goes through `persist.py` — do not bypass it with `obsidian-cli create`.
+All NDR ledger access goes through the `ndr` CLI (ndr:0129) — and it happens inside `ndr-drift-auditor`, not in this skill. The agent enumerates current heads with `ndr current --verbose` and `Read`s head files for full bodies; the CLI owns the supersession walk. `obsidian-cli` and MCP vault tools are not used for NDR atoms — they are scoped to non-NDR vault operations (ndr:0100). This skill uses `Bash` for diff resolution and ledger resolution, and `Task` for agent dispatch. Atom writes go through `ndr capture` (via `/capture-decision`) — never create atom files directly. If `ndr` is not on PATH, hard-error with the install hint (`bun run install:bin` in `~/Projects/ndr`); there is no fallback path.
 
 ## Hard rules
 
@@ -47,17 +47,21 @@ If empty or ambiguous, prompt:
 
 Parse `$ARGUMENTS`. If empty, ask the user (do not default silently).
 
-### 2. Detect repo area hint (optional)
+### 2. Resolve the ledger
+
+Standard resolution, mirroring the CLI's own walk-up: if a `.ndr.toml` exists between the repo root and the filesystem root, use its `ledger` value (relative paths resolve against that file's directory, `~/` expands); otherwise the vault default `~/Loose Ends/Decisions`. Pass the resolved path to the agent so it can both flag CLI calls (`--ledger`) and `Read` head files by joined path.
+
+### 3. Detect repo area hint (optional)
 
 If a `CLAUDE.md` or `.claude/CLAUDE.md` exists in the repo, scan for any explicit hint about which `area:` values are relevant (e.g. "this repo's decisions live under `area: tooling`"). If found, pass as `area_filter` to the agent. Otherwise audit all heads — false positives are tolerable; missed drift is not.
 
-### 3. Dispatch the agent
+### 4. Dispatch the agent
 
 Invoke `ndr-drift-auditor` with:
 
 ```json
 {
-  "vault_decisions_path": "~/Loose Ends/Decisions",
+  "ledger": "<resolved ledger path>",
   "diff_scope": {
     "kind": "<resolved kind>",
     "ref": "<resolved ref or null>"
@@ -67,7 +71,7 @@ Invoke `ndr-drift-auditor` with:
 }
 ```
 
-### 4. Render the report
+### 5. Render the report
 
 Render the agent's structured JSON as a punch list:
 
@@ -76,12 +80,12 @@ Render the agent's structured JSON as a punch list:
 
 Scope: <kind> (`<ref>`)
 VCS: <git | jj>
-Atoms scanned: <N> heads (<M> non-heads skipped)
+Atoms scanned: <N> heads
 Divergences: <K>
 
 ## Divergences
 
-### Decisions/0042-use-fastapi-for-auth.md
+### 0042-use-fastapi-for-auth.md
 **At-risk clause:** "All token verification flows through `auth/verify.py`."
 
 **Evidence:**
@@ -101,11 +105,13 @@ If `divergences: []`:
 # ndr drift check — <YYYY-MM-DD>
 
 Scope: <kind> (`<ref>`)
-Atoms scanned: <N> heads (<M> non-heads skipped)
+Atoms scanned: <N> heads
 No drift detected.
 ```
 
-### 5. Suggest next steps
+If the agent reports `malformed_skipped > 0`, append one line: `<M> malformed atom(s) skipped — run \`ndr doctor\` (or dispatch \`ndr-curator\`) for the full picture.`
+
+### 6. Suggest next steps
 
 After the punch list, offer the natural follow-ups for each divergence:
 
@@ -117,7 +123,7 @@ Never auto-apply. The skill's job ends at the punch list plus next-step suggesti
 
 ## When NOT to use this skill
 
-- **Corpus health checks** (orphan back-pointers, alias conflicts, taxonomy violations, missing required fields) — use `ndr-curator` instead.
+- **Corpus health checks** (orphan back-pointers, alias conflicts, taxonomy violations, missing required fields, malformed files) — `ndr doctor` via `ndr-curator` instead.
 - **Reading a single decision** — use `/decisions <ref-or-topic>`.
 - **Writing a new decision** — use `/capture-decision`.
 - **Style or lint drift** — that's a linter, not an ndr concern.
@@ -125,8 +131,8 @@ Never auto-apply. The skill's job ends at the punch list plus next-step suggesti
 
 ## Related
 
-- `ndr-drift-auditor` (agent) — does the actual walk + compare. This skill is its orchestrator.
-- `ndr-curator` (agent) — corpus health, complementary scope.
+- `ndr-drift-auditor` (agent) — does the actual enumerate + compare. This skill is its orchestrator.
+- `ndr-curator` (agent) — corpus health via `ndr doctor`, complementary scope.
 - `/capture-decision` — write-side; used to land amend/supersede outcomes as successor atoms.
 - `/decisions` — read-side; useful before a drift check to confirm what's current on a topic.
 - `spec-flow:close` — surfaces drift-check as an optional pre-archive prompt.
