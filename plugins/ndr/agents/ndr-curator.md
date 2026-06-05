@@ -29,7 +29,7 @@ Interpret, don't detect. `ndr doctor --json` produces the complete findings pict
 }
 ```
 
-- `ledger` — optional explicit ledger directory. When set, pass `--ledger <path>`. When null, omit the flag — the CLI resolves it (`.ndr.toml` walk-up from the CWD, then the vault default `~/Loose Ends/Decisions/`).
+- `ledger` — optional explicit ledger directory. When set, pass `--ledger <path>`. When null, omit the flag — the CLI resolves it (`.ndr.toml` walk-up from the CWD; errors if none exists).
 - `fix` — when true, forward `--fix`. The CLI repairs the one auto-fixable class (missing `superseded_by:` back-links), idempotently. No other mutation exists on this path.
 
 ## Method

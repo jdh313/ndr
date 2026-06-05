@@ -55,7 +55,7 @@ Reference files:
 
 - `${CLAUDE_PLUGIN_ROOT}/references/frontmatter-schema.md` — required fields.
 - `${CLAUDE_PLUGIN_ROOT}/references/decision-single.md` — body shape.
-- `~/Loose Ends/Decisions/.taxonomy/areas.yaml` and `topics.yaml` — taxonomy values.
+- `<ledger>/.taxonomy/areas.yaml` and `topics.yaml` — taxonomy values for the resolved ledger.
 
 ## Checks
 

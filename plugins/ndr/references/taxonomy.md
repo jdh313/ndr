@@ -17,9 +17,9 @@ Both are flat YAML lists of strings. One value per decision (not lists).
 
 ## Where the live values live
 
-**Current truth:** `~/Loose Ends/Decisions/.taxonomy/{areas,topics}.yaml` in the vault. Mutable; grows over time.
+**Current truth:** `<ledger>/.taxonomy/{areas,topics}.yaml` — sibling to the atoms in whichever ledger is resolved. Mutable; grows over time.
 
-**Install-time bootstrap:** `plugins/ndr/assets/taxonomy/{areas,topics}.yaml`. Frozen by design — the seed copied into the vault on `/ndr-bootstrap`. Drift between the asset and the vault is expected and correct.
+**Install-time seeds:** `ndr init` writes a starter taxonomy embedded in the binary; `/ndr-bootstrap` copies `plugins/ndr/assets/taxonomy/{areas,topics}.yaml` into the vault ledger. Both are frozen seeds — drift between seed and live taxonomy is expected and correct.
 
 This reference doc deliberately does NOT list current values. A static table here would drift the moment a real `/capture-decision` invocation grows the vault taxonomy, and any agent reading the snapshot would silently second-guess valid values. Always read the vault YAML for current truth.
 

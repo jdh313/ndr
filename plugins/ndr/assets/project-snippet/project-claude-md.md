@@ -1,26 +1,27 @@
 <!--
-NDR-tracked project marker. Append this snippet to a repo's
-`.claude/CLAUDE.md` (or merge into an existing CLAUDE.md) to opt the
-repo into the grounding rule. The orchestrator will then know to
-consult NDRs before substantive code work.
+NDR-tracked project marker. The normal opt-in path is `ndr init`, which
+writes the embedded grounding rule to `.claude/rules/ndr.md` (see
+src/cli/templates.ts NDR_RULE; keep the body below in sync). This copy is a
+manual-merge fallback — paste it under an existing `CLAUDE.md` for repos
+that prefer a single memory file over a rules/ directory.
 
-Manual edit, intentional — opting in is a per-repo decision, so the
-bootstrap does not modify repo files automatically.
+Opting in is a per-repo decision, so the bootstrap does not modify repo
+files automatically.
 -->
 
 ## NDR coverage
 
 This repository is tracked by the `ndr` plugin. Engineering decisions
-that govern this codebase live as atomic markdown files in
-`~/Loose Ends/Decisions/` with a `project: [[<this-repo>]]` frontmatter
-link.
+that govern this codebase live as atomic markdown files in the decision
+ledger pinned by this repo's `.ndr.toml`, with a
+`project: [[<this-repo>]]` frontmatter link.
 
 ### When the orchestrator should ground itself
 
 Before substantive code work in this repo — refactors, new features,
-schema changes, dependency swaps, or delegating to a coding subagent
-(`junior-dev`, `senior-dev`, `tech-lead`) — invoke `/ground` to surface
-the current decision heads relevant to the active area.
+schema changes, dependency swaps, or delegating to a coding subagent —
+invoke `/ground` to surface the current decision heads relevant to the
+active area.
 
 Skip grounding for: typo fixes, comment-only changes, single-line
 adjustments, or work on areas with no NDR coverage.

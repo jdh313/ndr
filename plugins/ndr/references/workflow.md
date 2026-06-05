@@ -8,30 +8,36 @@ The shared substrate for both flows. Installed via `bun run install:bin` in `~/P
 
 | Verb | Job |
 | --- | --- |
-| `ndr resolve <ref>` | Resolve any reference grain (atom-id, `#slug`, `area/topic`) to current-head brief(s), with drift surfaced when the seed was superseded |
-| `ndr search <query>` | Free-text search across atom titles + bodies; returns current heads |
-| `ndr current [--area] [--topic]` | List current heads, optionally filtered |
-| `ndr lineage <id>` | Walk a supersession chain explicitly |
-| `ndr capture` | Write path — single atom draft as JSON on stdin |
+| `ndr resolve <ref> [--json]` | Resolve any reference grain (atom-id, `#slug`, `area/topic`) to current-head brief(s), with drift surfaced when the seed was superseded |
+| `ndr search <query> [--json]` | Free-text search across atom titles + bodies; returns current heads |
+| `ndr current [--area] [--topic] [--json]` | List current heads, optionally filtered; the count goes to stderr |
+| `ndr lineage <id> [--json]` | Walk a supersession chain explicitly |
+| `ndr capture [file]` | Write path — single atom draft as JSON, from a file arg or stdin |
 | `ndr doctor [--fix] [--json]` | Corpus health checks; exit 1 when findings present; `--fix` repairs missing back-links; `--json` for machine consumers |
+| `ndr init` | Scaffold a repo's opt-in (`.ndr.toml`, ledger, taxonomy, `.claude/rules/ndr.md`) |
+| `ndr status [--json]` | Report wiring: resolved ledger + source, atom counts, taxonomy, grounding marker |
+| `ndr areas` / `ndr topics` | List the resolved ledger's taxonomy axes |
+
+Every read verb takes `--json` for structured output — a complement to the pinned human brief (ndr:0136) so skills parse data instead of formatted text.
 
 ### Ledger resolution
 
 Every verb resolves its ledger the same way:
 
 1. `--ledger <path>` flag (wins outright)
-2. *(capture only)* the draft payload's `vault_decisions` field
-3. `.ndr.toml` walk-up — from the CWD toward the filesystem root, the first `.ndr.toml` found pins the ledger
-4. Vault default: `~/Loose Ends/Decisions/`
+2. `NDR_LEDGER` env var (a shell-session override; only the flag beats it)
+3. *(capture only)* the draft payload's `vault_decisions` field
+4. `.ndr.toml` walk-up — from the CWD toward the filesystem root, the first `.ndr.toml` found pins the ledger
+5. Error pointing at `ndr init` — there is no built-in default ledger (`ndr status` reports this case instead of erroring)
 
-`.ndr.toml` is the per-repo opt-in marker (ndr:0130 — corpus root is a runtime config/CWD concern, not a schema concept):
+`.ndr.toml` is the per-repo opt-in marker (ndr:0130 — corpus root is a runtime config/CWD concern, not a schema concept); `ndr init` scaffolds it:
 
 ```toml
 ledger = "./decisions"     # required; relative paths resolve against this file's directory, ~/ expands
 project = "[[my-repo]]"    # optional; the project wikilink for atoms in this repo
 ```
 
-The vault default keeps the common case zero-config (ndr:0147); the repo file is additive opt-in. A present-but-broken `.ndr.toml` fails loudly rather than silently falling back.
+A personal catch-all ledger is just a `.ndr.toml` higher up the walk (e.g. at `~`, pointing wherever that corpus lives). A present-but-broken `.ndr.toml` fails loudly rather than silently falling back.
 
 ### Output contracts
 
@@ -161,7 +167,7 @@ Two complementary audits, both CLI-backed (deterministic detection) with LLM-fac
 scope + ledger resolution (skill) ──► @ndr-drift-auditor: ndr current --verbose ──► Read head files ──► compare vs diff ──► punch list
 ```
 
-- The skill resolves the diff scope (never silently defaulted) and the ledger (`.ndr.toml` walk-up, then vault default), and passes both to the agent.
+- The skill resolves the diff scope (never silently defaulted) and the ledger (`.ndr.toml` walk-up; error if none), and passes both to the agent.
 - The agent enumerates via `ndr current --verbose` — heads-only filtering and the supersession walk happen in-process; the agent never re-filters.
 - Full bodies (Decision / Consequences / `## Assumptions` callouts) come from `Read`ing head files — briefs carry only the gist (ndr:0136). Heads are safe to read; seeds are not.
 - The compare itself — does this diff violate a Decision, trip a `Revisit if:`, invalidate a Consequence — is LLM work and stays in the agent.
@@ -207,23 +213,19 @@ References are bi-temporal: a writer may mean "the atom that justified this code
 NDR coverage is per-repo and opt-in, with two complementary artifacts:
 
 1. **`.ndr.toml` at the repo root** — the machine-readable marker. Pins the ledger (and optionally the project wikilink) so every `ndr` invocation from inside the repo resolves against the right corpus. This is what the CLI and skills consume.
-2. **A snippet in the repo's `.claude/CLAUDE.md`** — the behavioral marker. Tells the orchestrator to run `/ground` before substantive code work. This is what makes grounding *happen*; the TOML alone changes where queries land, not whether they fire.
+2. **A grounding rule at `.claude/rules/ndr.md`** — the behavioral marker. Claude Code auto-loads it at session start (same priority as CLAUDE.md), telling the orchestrator to run `/ground` before substantive code work. This is what makes grounding *happen*; the TOML alone changes where queries land, not whether they fire. A standalone rule file (rather than a CLAUDE.md append) keeps idempotency a plain existence check and leaves the repo's main memory file untouched.
 
-The bootstrap installs a canonical copy of the snippet to `~/Loose Ends/Decisions/.templates/project-claude-md.md`. To opt a repo in:
+`ndr init` scaffolds both, plus the ledger directory and a starter `.taxonomy/`:
 
-```
-cat ~/Loose\ Ends/Decisions/.templates/project-claude-md.md >> <repo>/.claude/CLAUDE.md
-```
-
-and, when the repo keeps (or will keep) its own ledger or project identity:
-
-```toml
-# <repo>/.ndr.toml
-ledger = "~/Loose Ends/Decisions"   # or "./decisions" for a repo-local ledger
-project = "[[<this-repo>]]"
+```sh
+cd <repo>
+ndr init                          # repo-local ./decisions ledger
+ndr init --ledger ~/some/ledger   # or point at a shared ledger
 ```
 
-The snippet covers:
+It is idempotent — existing artifacts are skipped (`--force` rewrites `.ndr.toml` only; taxonomy files are never overwritten). The grounding rule and taxonomy seeds are embedded in the binary, so init works on machines without the plugin's vault content.
+
+The grounding rule covers:
 
 - That decisions for this repo live as atoms with `project: [[<this-repo>]]`.
 - When to invoke `/ground` (substantive edits, before delegating to a coding subagent) and when to skip (typo fixes, comment-only).
@@ -231,7 +233,7 @@ The snippet covers:
 - The `ndr:` reference convention for pointing at decisions from code.
 - When to invoke `/capture-decision` at end of chat.
 
-Why opt-in: not every repo has NDR coverage, and pulling decision context for repos that don't would be noise. Editing CLAUDE.md is also intentional — opting in records a per-repo commitment to consult the decision corpus.
+Why opt-in: not every repo has NDR coverage, and pulling decision context for repos that don't would be noise. Running `ndr init` is also intentional — opting in records a per-repo commitment to consult the decision corpus.
 
 ## Why this shape
 

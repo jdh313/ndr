@@ -39,8 +39,16 @@ The library exports:
 ## Usage
 
 ```sh
-# Resolve an atom id — ledger resolves as: --ledger flag > .ndr.toml walk-up
-# from CWD > vault default (~/Loose Ends/Decisions/)  (ndr:qevw6c)
+# Initialize a repo for ndr: .ndr.toml, ./decisions ledger, starter
+# .taxonomy/, and the grounding rule in .claude/rules/ndr.md. Idempotent.
+ndr init
+
+# Report how ndr is wired up here: ledger + source, atom counts, taxonomy,
+# grounding marker. Never errors — reports "(none)" when unconfigured.
+ndr status
+
+# Resolve an atom id — ledger resolves as: --ledger flag > NDR_LEDGER env >
+# .ndr.toml walk-up from CWD > error pointing at `ndr init`
 ndr resolve 0102
 
 # Drift signal — seed atom 0070 was superseded; output names head 0102
@@ -65,8 +73,17 @@ ndr lineage 0070
 ndr current --area tooling
 ndr current --area tooling --topic lint-format --verbose
 
-# Capture a decision atom — draft JSON on stdin, prints the written {id, path,
-# superseded, aliases_moved}. --ledger wins over the draft's vault_decisions.
+# Any read verb takes --json for structured output (skills/library consumers)
+ndr resolve 0070 --json
+ndr current --json
+
+# List the taxonomy axes for the resolved ledger
+ndr areas
+ndr topics --json
+
+# Capture a decision atom — draft JSON from a file or stdin, prints the written
+# {id, path, superseded, aliases_moved}. --ledger > NDR_LEDGER > vault_decisions.
+ndr capture draft.json --ledger ./test/fixtures/ledger
 echo "$DRAFT_JSON" | ndr capture --ledger ./test/fixtures/ledger
 
 # Corpus health checks — grouped human report, exit 1 when findings exist
@@ -81,10 +98,11 @@ ndr doctor --fix
 
 Brief shape, drift placement, and basename sourcing are pinned by `ndr:0136`.
 
-A repo opts into a non-default ledger with `.ndr.toml` at its root —
-`ledger` (required; relative paths resolve against the file, `~/` expands)
-and `project` (optional). No file means the vault default applies; a broken
-file fails loudly instead of falling back.
+A repo opts into a ledger with `.ndr.toml` at its root (`ndr init` scaffolds
+it) — `ledger` (required; relative paths resolve against the file, `~/`
+expands) and `project` (optional). `NDR_LEDGER` overrides the config for a
+shell session (only `--ledger` beats it). No flag, env, or file anywhere up the
+walk means an error; a broken file fails loudly instead of falling back.
 
 ```toml
 ledger = "./decisions"
@@ -140,5 +158,7 @@ bun run install:bin
 `bun run build` alone just emits `dist/ndr` (gitignored). The symlink means a
 later `bun run build` updates the installed binary in place — no re-link needed.
 The binary resolves its ledger per-invocation: `--ledger` flag, else the
-nearest `.ndr.toml` walking up from the CWD, else `~/Loose Ends/Decisions/`
-(ndr:qevw6c). Built and tested against Bun 1.3.x.
+`NDR_LEDGER` env var, else the nearest `.ndr.toml` walking up from the CWD,
+else an error pointing at `ndr init`. There is no built-in default ledger — a
+personal default is a `.ndr.toml` higher up the walk (e.g. at `~`). Built and
+tested against Bun 1.3.x.

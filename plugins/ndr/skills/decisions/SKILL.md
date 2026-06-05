@@ -73,8 +73,8 @@ Strip a leading `ndr:` if present, then categorize:
 | anything else | free-text | Stage 1b |
 
 The ledger resolves automatically (`--ledger` flag > `.ndr.toml` walk-up
-from CWD > vault default) — only pass `--ledger` when the user names a
-non-default ledger explicitly.
+from CWD; the CLI errors if none exists) — only pass `--ledger` when the
+user names a different ledger explicitly.
 
 ### Stage 1a — Structured ref: run the CLI
 
