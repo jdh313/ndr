@@ -5,10 +5,10 @@ import path from "node:path";
 
 import {
   CONFIG_BASENAME,
-  DEFAULT_LEDGER_PATH,
   RepoConfigError,
   findRepoConfig,
   parseRepoConfig,
+  resolveLedger,
   resolveLedgerPath,
 } from "./config.ts";
 
@@ -106,17 +106,56 @@ describe("resolveLedgerPath", () => {
     expect(resolveLedgerPath("/flag/wins", tmp)).toBe("/flag/wins");
   });
 
-  test("a .ndr.toml beats the vault default", async () => {
+  test("a .ndr.toml resolves when no flag is passed", async () => {
     await writeConfig(tmp, 'ledger = "./decisions"\n');
     expect(resolveLedgerPath(undefined, tmp)).toBe(path.join(tmp, "decisions"));
   });
 
-  test("falls back to the vault default when neither flag nor config exists", () => {
-    expect(resolveLedgerPath(undefined, tmp)).toBe(DEFAULT_LEDGER_PATH);
+  test("errors pointing at `ndr init` when neither flag nor config exists", () => {
+    expect(() => resolveLedgerPath(undefined, tmp)).toThrow(RepoConfigError);
+    expect(() => resolveLedgerPath(undefined, tmp)).toThrow(/ndr init/);
   });
 
   test("a broken .ndr.toml fails loudly instead of falling back", async () => {
     await writeConfig(tmp, "ledger = [unclosed\n");
     expect(() => resolveLedgerPath(undefined, tmp)).toThrow(RepoConfigError);
+  });
+});
+
+describe("NDR_LEDGER env in resolution", () => {
+  const saved = process.env.NDR_LEDGER;
+  afterEach(() => {
+    if (saved === undefined) delete process.env.NDR_LEDGER;
+    else process.env.NDR_LEDGER = saved;
+  });
+
+  test("env overrides a present .ndr.toml", async () => {
+    await writeConfig(tmp, 'ledger = "./decisions"\n');
+    process.env.NDR_LEDGER = "/env/wins";
+    expect(resolveLedgerPath(undefined, tmp)).toBe("/env/wins");
+    expect(resolveLedger(undefined, tmp)).toEqual({ path: "/env/wins", source: { kind: "env" } });
+  });
+
+  test("the --ledger flag still beats the env var", async () => {
+    process.env.NDR_LEDGER = "/env/loses";
+    expect(resolveLedgerPath("/flag/wins", tmp)).toBe("/flag/wins");
+    expect(resolveLedger("/flag/wins", tmp).source).toEqual({ kind: "flag" });
+  });
+
+  test("resolveLedger reports the config source and `none` without throwing", async () => {
+    delete process.env.NDR_LEDGER;
+    const cfg = await writeConfig(tmp, 'ledger = "./decisions"\n');
+    expect(resolveLedger(undefined, tmp)).toEqual({
+      path: path.join(tmp, "decisions"),
+      source: { kind: "config", configPath: cfg },
+    });
+    // A fresh top-level temp dir (not nested under tmp, which now carries a
+    // config the walk-up would find).
+    const empty = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-noconfig-"));
+    try {
+      expect(resolveLedger(undefined, empty).source).toEqual({ kind: "none" });
+    } finally {
+      await fs.rm(empty, { recursive: true, force: true });
+    }
   });
 });

@@ -174,9 +174,11 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort, DoctorPort {
   }
 
   async captureAtom(draft: AtomDraft): Promise<CaptureResult> {
-    // 1. Mint an id if the draft omits one, then validate the full frontmatter.
+    // 1. Mint an id if the draft omits one, apply capture-intent defaults for
+    //    the fields a fresh decision almost always carries (the shared schema
+    //    stays strict so on-disk reads are unaffected), then validate.
     const id = draft.frontmatter.id ?? (await this.mintFreshId());
-    const parsed = this.validateDraft({ ...draft.frontmatter, id });
+    const parsed = this.validateDraft(withCaptureDefaults({ ...draft.frontmatter, id }));
 
     // 2. Taxonomy gate — area and topic must be in the on-disk taxonomy (ndr:0144
     //    keeps the human axis in slugs/taxonomy now that ids are opaque).
@@ -544,6 +546,19 @@ function slugifyTitle(title: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);
+}
+
+// Capture-intent defaults: a fresh decision almost always carries these exact
+// values, so the capture path supplies them when a draft omits the field. The
+// shared FrontmatterSchema stays strict (no `.default` on status/supersedes) so
+// on-disk atom reads still require them — only inbound drafts get the shortcut.
+function withCaptureDefaults(fm: Record<string, unknown>): Record<string, unknown> {
+  return {
+    status: "current",
+    supersedes: [],
+    tags: ["decision"],
+    ...fm,
+  };
 }
 
 // The drafter leaves a literal `# PLACEHOLDER —` heading; stamp the real id in
