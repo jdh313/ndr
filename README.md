@@ -23,6 +23,11 @@ default; `--fix` repairs exactly one class — missing `superseded_by`
 back-links — idempotently. Exit codes 0 (healthy) / 1 (findings) / 3 (a
 repair write failed).
 
+The Claude Code plugin (skills `/decisions`, `/ground`, `/capture-decision`,
+`/drift-check` + agents) is co-located in `plugins/ndr/` and served from this
+repo's own marketplace (`ndr@ndr`, ndr:h7vdvf) — the skills route every NDR
+operation through this CLI (ndr:0129). The cc-marketplace copy is deprecated.
+
 The library exports:
 
 - `Atom`, `AtomId`, `Slug`, `Reference`, `Ledger` — domain types (`src/domain/`).
@@ -34,7 +39,8 @@ The library exports:
 ## Usage
 
 ```sh
-# Resolve an atom id against the default ledger (~/Loose Ends/Decisions/)
+# Resolve an atom id — ledger resolves as: --ledger flag > .ndr.toml walk-up
+# from CWD > vault default (~/Loose Ends/Decisions/)  (ndr:qevw6c)
 ndr resolve 0102
 
 # Drift signal — seed atom 0070 was superseded; output names head 0102
@@ -75,6 +81,26 @@ ndr doctor --fix
 
 Brief shape, drift placement, and basename sourcing are pinned by `ndr:0136`.
 
+A repo opts into a non-default ledger with `.ndr.toml` at its root —
+`ledger` (required; relative paths resolve against the file, `~/` expands)
+and `project` (optional). No file means the vault default applies; a broken
+file fails loudly instead of falling back.
+
+```toml
+ledger = "./decisions"
+project = "[[my-repo]]"
+```
+
+## Plugin
+
+```
+/plugin marketplace add ~/Projects/ndr
+/plugin install ndr@ndr
+```
+
+Requires the `ndr` binary on PATH (`bun run install:bin`) — the skills
+hard-error without it. See `plugins/ndr/README.md`.
+
 ## Layout
 
 ```
@@ -83,6 +109,9 @@ src/
   domain/     Atom, ledger, supersession types
   ports/      ReadPort, WritePort interfaces
   adapters/   Backend implementations (markdown filesystem, ...)
+plugins/
+  ndr/        Claude Code plugin (skills + agents), served from
+              .claude-plugin/marketplace.json at the repo root
 ```
 
 ## Development
@@ -110,6 +139,6 @@ bun run install:bin
 
 `bun run build` alone just emits `dist/ndr` (gitignored). The symlink means a
 later `bun run build` updates the installed binary in place — no re-link needed.
-The binary defaults the ledger to `~/Loose Ends/Decisions/` from any working
-directory; override per-invocation with `--ledger`. Built and tested against
-Bun 1.3.x.
+The binary resolves its ledger per-invocation: `--ledger` flag, else the
+nearest `.ndr.toml` walking up from the CWD, else `~/Loose Ends/Decisions/`
+(ndr:qevw6c). Built and tested against Bun 1.3.x.
