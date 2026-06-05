@@ -29,7 +29,7 @@ The orchestrator will provide:
 
 - **Source.** Either inline text (transcript, conversation excerpt, doc) or a file path / wikilink to read.
 - **Project context** (optional). What project the captures belong to — helps you suggest `project:` for each atom.
-- **Taxonomy snapshot** (optional). Current `area:` / `topic:` values from `~/Loose Ends/Decisions/.taxonomy/{areas,topics}.yaml`. Use these to suggest matching values per candidate. If you'd suggest a new value, flag it.
+- **Taxonomy snapshot** (optional). Current `area:` / `topic:` values from `<ledger>/.taxonomy/{areas,topics}.yaml`. Use these to suggest matching values per candidate. If you'd suggest a new value, flag it.
 
 If the source is a file path, read it. If it's a wikilink to a vault note, use `obsidian-cli read file=<path>`. Do not chase secondary references — extract from the source as given.
 

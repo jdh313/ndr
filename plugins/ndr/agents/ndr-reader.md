@@ -34,8 +34,8 @@ supersession chains in-process and only ever returns current heads
 - If `ndr` is not on PATH (`command -v ndr` fails), return
   `ERROR: ndr CLI not installed — run \`bun run install:bin\` in ~/Projects/ndr`
   and stop. There is no fallback.
-- The ledger resolves automatically (`.ndr.toml` walk-up from the CWD,
-  then the vault default). Pass `--ledger` only if the caller names one.
+- The ledger resolves automatically (`.ndr.toml` walk-up from the CWD;
+  the CLI errors if none exists). Pass `--ledger` only if the caller names one.
 - **`Read` is for two things only:** plugin references
   (`${CLAUDE_PLUGIN_ROOT}/references/*.md`) and **head** files surfaced
   by a CLI brief, when the caller's scope makes the head's

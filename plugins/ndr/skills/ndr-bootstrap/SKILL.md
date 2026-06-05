@@ -15,7 +15,7 @@ Install ndr's vault-resident content on a fresh machine. Four things land:
 1. **Seed decision atoms** (`assets/decisions/*.md` — 0001-0008 A-H meta-chain plus 0049-0051 reference-addressability resolution) → `~/Loose Ends/Decisions/`
 2. **Current Decisions Base** (`assets/bases/current-decisions.base`) → `~/Loose Ends/Bases/Current Decisions.base`
 3. **Taxonomy YAML** (`assets/taxonomy/areas.yaml`, `topics.yaml`) → `~/Loose Ends/Decisions/.taxonomy/`
-4. **Project-CLAUDE.md template** (`assets/project-snippet/project-claude-md.md`) → `~/Loose Ends/Decisions/.templates/project-claude-md.md` — the snippet a user appends to a repo's `.claude/CLAUDE.md` to opt the repo into the grounding rule.
+4. **Project grounding-rule template** (`assets/project-snippet/project-claude-md.md`) → `~/Loose Ends/Decisions/.templates/project-claude-md.md` — a manual-merge fallback. The normal opt-in is `ndr init`, which writes `.claude/rules/ndr.md` directly; this template is for hand-merging into an existing `CLAUDE.md`.
 
 Each file is copied **only if the target is absent**. Re-runs do nothing destructive — they print `skipped (exists): <path>` for any target already present.
 
@@ -103,8 +103,7 @@ fi
 echo ""
 echo "bootstrap complete: $copied copied, $skipped skipped (already present)"
 echo ""
-echo "to opt a repo into the grounding rule:"
-echo "  cat '$snippet_dst' >> <repo>/.claude/CLAUDE.md"
+echo "to opt a repo into NDR coverage: run \`ndr init\` at the repo root"
 ```
 
 After the script finishes, report the counts to the user and (if anything was copied) suggest opening `~/Loose Ends/Bases/Current Decisions.base` in Obsidian to verify the rollup renders.
@@ -129,8 +128,7 @@ copied: Decisions/.templates/project-claude-md.md
 
 bootstrap complete: 12 copied, 0 skipped (already present)
 
-to opt a repo into the grounding rule:
-  cat '/Users/<you>/Loose Ends/Decisions/.templates/project-claude-md.md' >> <repo>/.claude/CLAUDE.md
+to opt a repo into NDR coverage: run `ndr init` at the repo root
 ```
 
 ### Already bootstrapped (everything skipped)

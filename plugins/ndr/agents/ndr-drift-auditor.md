@@ -28,7 +28,7 @@ Audit code-vs-decision drift. You enumerate the current decision heads via the `
 
 ```json
 {
-  "ledger": "~/Loose Ends/Decisions",
+  "ledger": "./decisions",
   "diff_scope": {
     "kind": "working_tree | branch_range | commit_range | full_repo",
     "ref": "<branch ref or commit range; ignored for working_tree and full_repo>"

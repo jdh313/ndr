@@ -49,7 +49,7 @@ Parse `$ARGUMENTS`. If empty, ask the user (do not default silently).
 
 ### 2. Resolve the ledger
 
-Standard resolution, mirroring the CLI's own walk-up: if a `.ndr.toml` exists between the repo root and the filesystem root, use its `ledger` value (relative paths resolve against that file's directory, `~/` expands); otherwise the vault default `~/Loose Ends/Decisions`. Pass the resolved path to the agent so it can both flag CLI calls (`--ledger`) and `Read` head files by joined path.
+Standard resolution, mirroring the CLI's own walk-up: if a `.ndr.toml` exists between the repo root and the filesystem root, use its `ledger` value (relative paths resolve against that file's directory, `~/` expands); otherwise stop and tell the user to run `ndr init` (the CLI itself errors without a config). Pass the resolved path to the agent so it can both flag CLI calls (`--ledger`) and `Read` head files by joined path.
 
 ### 3. Detect repo area hint (optional)
 

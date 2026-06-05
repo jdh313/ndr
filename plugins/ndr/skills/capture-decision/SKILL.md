@@ -50,7 +50,7 @@ These constraints are upstream of any subagent — the skill enforces them at th
 
 ## Reference paths
 
-- **Ledger:** resolved by the CLI — `--ledger` flag > `.ndr.toml` walk-up from CWD > vault default (`~/Loose Ends/Decisions/`). One atom per file, `<id>-<kebab-title>.md`.
+- **Ledger:** resolved by the CLI — `--ledger` flag > `NDR_LEDGER` env > `.ndr.toml` walk-up from CWD > error pointing at `ndr init`. One atom per file, `<id>-<kebab-title>.md`.
 - **Taxonomy (ledger-resident, mutable):** `<ledger>/.taxonomy/{areas,topics}.yaml`.
 - **Schema spec:** `${CLAUDE_PLUGIN_ROOT}/references/frontmatter-schema.md`.
 - **Template:** `${CLAUDE_PLUGIN_ROOT}/references/decision-single.md`.

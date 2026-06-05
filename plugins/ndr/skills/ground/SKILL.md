@@ -112,8 +112,8 @@ Pick the strongest signal, in priority order:
 | 1–3 concrete search terms | `ndr search '<terms>' --verbose` |
 | fuzzy scope needing judgment/synthesis | dispatch `@ndr-reader` (payload below) |
 
-Ledger resolution is automatic (`.ndr.toml` walk-up from CWD, then the
-vault default) — don't pass `--ledger` unless the user named one.
+Ledger resolution is automatic (`.ndr.toml` walk-up from CWD; the CLI
+errors if none exists) — don't pass `--ledger` unless the user named one.
 
 A non-zero exit with a real error (not just "no atoms match") is
 surfaced, not swallowed (ndr:0138).

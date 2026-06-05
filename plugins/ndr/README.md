@@ -32,7 +32,7 @@ Then install the plugin from this repo's marketplace:
 ```
 
 After install:
-- Decisions live as `<ledger>/<id>-<kebab-title>.md` — one atom per file, always single-file. The ledger resolves per-invocation: `--ledger` flag > `.ndr.toml` walk-up from CWD > vault default (`~/Loose Ends/Decisions/`).
+- Decisions live as `<ledger>/<id>-<kebab-title>.md` — one atom per file, always single-file. The ledger resolves per-invocation: `--ledger` flag > `NDR_LEDGER` env > `.ndr.toml` walk-up from CWD > error pointing at `ndr init`. `ndr status` reports which won.
 - New atoms get 6-char base32 ids assigned by `ndr capture` (ndr:0144); legacy 4-digit ids are frozen.
 - Each atom uses a **hybrid altitude body**: heading + one-line gist for every section, with deeper texture in default-collapsed `[!info]-` / `[!warning]-` callouts.
 - The Obsidian Base at `~/Loose Ends/Bases/Current Decisions.base` gives a faceted rollup (cards, tables, by area, superseded chain).
@@ -40,14 +40,16 @@ After install:
 
 ## Per-repo config
 
-A repo opts its CWD into a specific ledger with `.ndr.toml` at the repo root:
+`ndr init` opts a repo in — it scaffolds `.ndr.toml`, the ledger directory
+with a starter `.taxonomy/`, and the grounding rule in `.claude/rules/ndr.md`
+(auto-loaded by Claude Code at session start), all idempotently. The config it writes:
 
 ```toml
 ledger = "./decisions"     # required; relative paths resolve against this file, ~/ expands
 project = "[[my-repo]]"    # optional project wikilink
 ```
 
-No config file is needed for the common case — the vault default applies (ndr:0147). See `references/workflow.md#opting-a-repo-into-ndr-coverage`.
+There is no built-in default ledger — every CWD needs a `.ndr.toml` somewhere up the walk (a `~/.ndr.toml` makes a personal ledger the catch-all). See `references/workflow.md#opting-a-repo-into-ndr-coverage`.
 
 ## Plugin layout
 
