@@ -901,8 +901,15 @@ async function readStdin(): Promise<string> {
 // Structured JSON output for the read verbs (--json). Complements the pinned
 // human brief (ndr:0136) so skills and other library consumers parse data
 // instead of formatted text. `references` mirrors the brief's References block.
+// The pasteable slug reference uses the bare form (ndr:0049) — strip the
+// storage-only `ndr-` alias prefix (ndr:0050) so `ndr-oxc-stack` emits as
+// `ndr:#oxc-stack`, the form `ndr resolve` accepts back.
+function slugRef(alias: string): string {
+  return `ndr:#${alias.replace(/^ndr-/, "")}`;
+}
+
 function atomReferences(fm: Atom["frontmatter"]): string[] {
-  return [`ndr:${fm.id}`, ...fm.aliases.map((a) => `ndr:#${a}`), `ndr:${fm.area}/${fm.topic}`];
+  return [`ndr:${fm.id}`, ...fm.aliases.map(slugRef), `ndr:${fm.area}/${fm.topic}`];
 }
 
 function atomSummary(atom: Atom, filename: string | null): Record<string, unknown> {
@@ -978,7 +985,7 @@ export function formatBrief(chain: readonly Atom[], headFilename: string | null)
   lines.push("References:");
   lines.push(`  - ndr:${fm.id}`);
   for (const alias of fm.aliases) {
-    lines.push(`  - ndr:#${alias}`);
+    lines.push(`  - ${slugRef(alias)}`);
   }
   lines.push(`  - ndr:${fm.area}/${fm.topic}`);
 
