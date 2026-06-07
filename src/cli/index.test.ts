@@ -122,6 +122,16 @@ describe("ndr resolve #<slug>", () => {
     expect(result.stdout).toContain("(0132-ndr-uses-the-oxc-stack-for-lint-and-format)");
   });
 
+  test("the slug reference renders in bare form, not with the ndr- prefix (JUN-179)", async () => {
+    const human = await resolveCommand("#oxc-stack", FIXTURES);
+    expect(human.stdout).toContain("ndr:#oxc-stack");
+    expect(human.stdout).not.toContain("ndr:#ndr-oxc-stack");
+
+    const json = JSON.parse((await resolveCommand("#oxc-stack", FIXTURES, { json: true })).stdout);
+    expect(json.references).toContain("ndr:#oxc-stack");
+    expect(json.references).not.toContain("ndr:#ndr-oxc-stack");
+  });
+
   test("unminted slug exits 1 with a not-found message", async () => {
     const result = await resolveCommand("#no-such-slug", FIXTURES);
     expect(result.exitCode).toBe(1);
