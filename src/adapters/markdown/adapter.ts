@@ -122,6 +122,17 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort, DoctorPort {
     return file ? path.basename(file) : null;
   }
 
+  // Raw on-disk text for a single atom, frontmatter included — frozen, with no
+  // supersession walk. Backs `ndr show <atom-id>`, whose contract is to be
+  // byte-equivalent to reading the file directly (ndr:0136 successor).
+  async getRawAtom(id: AtomId): Promise<string> {
+    const file = await this.findFileForId(id);
+    if (file === null) {
+      throw new AtomNotFoundError(id);
+    }
+    return await fs.readFile(file, "utf8");
+  }
+
   async walkLineage(id: AtomId): Promise<Atom[]> {
     const chain: Atom[] = [];
     const seen = new Set<string>();
