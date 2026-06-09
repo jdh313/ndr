@@ -4,6 +4,8 @@ When a candidate passes the **atomicity** test (one chosen path, one set of cons
 
 The rubric is a prompt for human judgment, not a pass/fail gate. The structural gates (`atomic only`, `supersession refusal`, `taxonomy enforcement`) live in the skill's `## Hard rules`; this lives one level softer.
 
+This doc is the **fast, soft** layer. For a candidate consequential enough to earn a real deliberation — code-grounding, the general rule behind the choice, the cost asymmetry, failure modes, the forward-bind test — see `interrogation.md` and the `/interrogate-decision` skill that walks it. The routing buckets below are shared between the two; the deep analytical method that fills them lives there.
+
 ## Three-question positive test
 
 A candidate is NDR-worthy when **all three** are yes:

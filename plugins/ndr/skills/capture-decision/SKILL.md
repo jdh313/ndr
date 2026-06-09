@@ -86,6 +86,8 @@ For each candidate with revising signal, you'll need to ask the user: **what is 
 
 Atomicity (Step 1) checks *shape*. This pass checks *grain* — is the candidate actually NDR-worthy, or would it live better as a code comment, CLAUDE.md gotcha, or rule file? Full criteria in `${CLAUDE_PLUGIN_ROOT}/references/worthiness.md`; load and skim if any candidate is borderline.
 
+For a candidate that is **borderline AND consequential** (the routing call is close *and* getting it wrong is expensive), pull the one or two deep moves that resolve the doubt from `${CLAUDE_PLUGIN_ROOT}/references/interrogation.md` — usually the asymmetry check ("is this `hard` enough to matter?") or the forward-bind check ("a decision, or just documentation?"). This is a targeted pull, not the full walk — when a candidate needs the whole eight-move deliberation, that's `/interrogate-decision`'s job, run before capture.
+
 For each candidate, ask:
 
 1. **Named alternative?** Is there a chosen path with an alternative anyone could plausibly have picked?
@@ -273,6 +275,7 @@ clear aliases: [].
 ## Related
 
 - `/decisions <topic>` — the read-side companion. Use it BEFORE capture to check whether a current decision on the topic already exists (avoid accidental parallel decisions).
+- `/interrogate-decision` — the deep pre-capture deliberation. Run it BEFORE this skill when a candidate is consequential enough to stress-test (genuine fork, possible supersession, "is this even a decision?"); it produces a routing verdict and hands the confirmed candidate here.
 - `ndr capture` — the deterministic write path (ndr:0129, ndr:0146); owns ids (ndr:0144) and the three-write supersession transaction (ndr:0051).
 - `ndr-extractor` — long-source candidate extraction.
 - `ndr-drafter` — frontmatter + body composition.
@@ -281,4 +284,5 @@ clear aliases: [].
 - `${CLAUDE_PLUGIN_ROOT}/references/frontmatter-schema.md` — full schema spec.
 - `${CLAUDE_PLUGIN_ROOT}/references/taxonomy.md` — taxonomy rules and growth protocol.
 - `${CLAUDE_PLUGIN_ROOT}/references/worthiness.md` — three-question rubric for grain/routing (Step 2.5).
+- `${CLAUDE_PLUGIN_ROOT}/references/interrogation.md` — deep deliberation heuristics; Step 2.5 pulls individual moves for borderline-and-heavy candidates.
 - `${CLAUDE_PLUGIN_ROOT}/references/workflow.md` — capture + read end-to-end.
