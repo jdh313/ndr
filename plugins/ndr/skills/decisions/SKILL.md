@@ -28,6 +28,15 @@ edits) use `/ground`.
    named atom may be superseded; `ndr resolve` returns the head and
    surfaces the drift. Never reconstruct the brief yourself — present
    what the CLI emits (ndr:0136).
+   - **The gist is partial, not the whole atom.** The default brief shows
+     only the `## Decision` gist; Why / Alternatives / Consequences /
+     `## Assumptions` are withheld by design. When you need the complete
+     body, do **not** open the ledger file — the CLI carries it:
+     `ndr resolve <ref> --full` (supersession-aware, the current head's
+     full body) or `ndr show <atom-id>` (one specific atom, frozen — the
+     only way to read a *superseded* atom's body, e.g. a historical
+     `ndr:0042` anchor). The never-`Read`-the-file rule still holds; these
+     verbs are how you read the full body without it.
 2. **Surface errors, don't swallow them.** A non-zero exit from
    `ndr resolve <ref>` is a hard signal (ndr:0138) — show the stderr
    message. For a 6-char token that fails as an atom-id, fall back to
@@ -140,6 +149,12 @@ References:
   - ndr:0102
   - ndr:substrate/substrate
 ```
+
+The gist shown here is partial by design (ndr:0136). If the user needs the
+full reasoning — Why, Alternatives, Consequences, `## Assumptions` — re-run
+with `ndr resolve <ref> --full` for the head's complete body, or
+`ndr show <atom-id>` to read one specific (possibly superseded) atom frozen.
+Do not open the ledger file by hand.
 
 ### Topic resolution (multiple heads)
 

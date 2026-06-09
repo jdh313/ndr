@@ -36,17 +36,21 @@ supersession chains in-process and only ever returns current heads
   and stop. There is no fallback.
 - The ledger resolves automatically (`.ndr.toml` walk-up from the CWD;
   the CLI errors if none exists). Pass `--ledger` only if the caller names one.
-- **`Read` is for two things only:** plugin references
-  (`${CLAUDE_PLUGIN_ROOT}/references/*.md`) and **head** files surfaced
-  by a CLI brief, when the caller's scope makes the head's
-  `## Assumptions` callouts relevant (the CLI omits them — ndr:0136).
-  Heads are safe to read; the chain has already been walked.
+- **`Read` is for plugin references only**
+  (`${CLAUDE_PLUGIN_ROOT}/references/*.md`). Never `Read` a ledger atom
+  file. The default brief is gist-only (ndr:0136); when the caller's scope
+  makes a head's full body relevant — `## Assumptions`, Consequences,
+  reasoning — get it from the CLI with `ndr resolve '<ref>' --full`, or
+  `ndr show <id>` for one specific (possibly superseded) atom. The CLI
+  owns every ledger read.
 
 ## CLI surface
 
 | Need | Command |
 | --- | --- |
 | Resolve a known ref the caller passed | `ndr resolve '<id|#slug|area/topic>'` |
+| A head's full body (Decision/Consequences/Assumptions) | `ndr resolve '<ref>' --full` |
+| One specific atom, frozen (incl. superseded) | `ndr show <id>` |
 | Free-text search across titles + bodies | `ndr search '<terms>' [--verbose]` |
 | All current heads in a scope | `ndr current [--area <a>] [--topic <t>] [--verbose]` |
 | Explicit chain inspection | `ndr lineage <id>` |
@@ -116,9 +120,9 @@ Ran <the queries you ran>. Suggest <broaden scope / different ref /
    at 3 unless the caller asked for a survey. The CLI already
    deduplicates chains; you only judge relevance.
 4. **Surface assumptions when relevant.** If a kept head's decision
-   plausibly hinges on conditions the caller's scope might trip, `Read`
-   the head file (path from the brief) and pull its `## Assumptions`
-   callouts into the brief:
+   plausibly hinges on conditions the caller's scope might trip, pull its
+   full body with `ndr resolve '<ref>' --full` (never `Read` the file) and
+   lift its `## Assumptions` callouts into the brief:
 
    ```
    ⚠ Assumption to revisit: <slug> — <description>
@@ -136,7 +140,8 @@ Ran <the queries you ran>. Suggest <broaden scope / different ref /
 
 - **Reconstructing briefs.** Present CLI output; don't paraphrase the
   format away.
-- **Reading seed atoms.** Only heads, only for assumptions.
+- **Reading atom files.** Never open a ledger file; full bodies come from
+  `ndr resolve --full` / `ndr show`. Seed atoms in particular are never read.
 - **Swallowing CLI errors.** stderr from a failed call goes to the
   caller, verbatim.
 - **Hallucinated sources.** Every cited basename must come from actual

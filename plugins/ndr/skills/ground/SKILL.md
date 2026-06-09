@@ -146,12 +146,13 @@ If heads came back:
 - **Batch (3+ heads):** present as a compact table of titles + atom-ids
   + `ndr:` refs, with a one-line invitation: "Pull any of these into the
   working context? (1-N, all, skip)".
-- **Assumption warnings** — CLI briefs omit assumption callouts
-  (ndr:0136); when a head's revisit conditions plausibly matter to the
-  edit at hand, `Read` the **head** file (path from the brief's
-  basename) and surface its `## Assumptions` callouts. Reading the head
-  is safe — the CLI already walked the chain; it is *seed* atoms that
-  must never be read directly.
+- **Full body when it matters** — the default brief is gist-only; Why /
+  Alternatives / Consequences / `## Assumptions` are omitted (ndr:0136).
+  When a head's reasoning or revisit conditions plausibly bear on the edit
+  at hand, pull its complete body with `ndr resolve <ref> --full` (or
+  `ndr show <atom-id>` for one specific atom) — do **not** open the ledger
+  file by hand. The CLI owns the read; *seed* atoms must never be read
+  directly.
 
 If nothing matched:
 
@@ -214,10 +215,12 @@ No NDR coverage for `marketing-site` repo. Proceeding without grounding.
 
 ## Hard rules
 
-1. **The CLI owns the walk.** Never `Read` a seed atom file directly,
-   even when a ticket body or prior chat names specific atom IDs —
-   `ndr resolve` returns the head and surfaces drift. The one sanctioned
-   direct read is the **head** file for assumption callouts (step 3).
+1. **The CLI owns the walk.** Never `Read` an atom file directly, even
+   when a ticket body or prior chat names specific atom IDs —
+   `ndr resolve` returns the head and surfaces drift. When you need a
+   head's full body (assumptions, consequences, reasoning), get it from
+   the CLI — `ndr resolve <ref> --full` or `ndr show <atom-id>` — not by
+   opening the file (step 3).
 2. **Don't surface superseded atoms.** The CLI never returns one as a
    head; don't reintroduce them from memory.
 3. **Stay quiet on empty.** No-coverage scenarios get one line. Don't
