@@ -18,7 +18,7 @@ This skill encodes the **code-vs-decision coherence check** for ndr — compleme
 
 ## Tool usage
 
-All NDR ledger access goes through the `ndr` CLI (ndr:0129) — and it happens inside `ndr-drift-auditor`, not in this skill. The agent enumerates current heads with `ndr current --verbose` and `Read`s head files for full bodies; the CLI owns the supersession walk. `obsidian-cli` and MCP vault tools are not used for NDR atoms — they are scoped to non-NDR vault operations (ndr:0100). This skill uses `Bash` for diff resolution and ledger resolution, and `Task` for agent dispatch. Atom writes go through `ndr capture` (via `/capture-decision`) — never create atom files directly. If `ndr` is not on PATH, hard-error with the install hint (`bun run install:bin` in `~/Projects/ndr`); there is no fallback path.
+All NDR ledger access goes through the `ndr` CLI (ndr:0129) — and it happens inside `ndr-drift-auditor`, not in this skill. The agent enumerates current heads with `ndr current --verbose` and pulls full bodies with `ndr resolve <atom-id> --full` (never by reading ledger files); the CLI owns the supersession walk. `obsidian-cli` and MCP vault tools are not used for NDR atoms — they are scoped to non-NDR vault operations (ndr:0100). This skill uses `Bash` for diff resolution and ledger resolution, and `Task` for agent dispatch. Atom writes go through `ndr capture` (via `/capture-decision`) — never create atom files directly. If `ndr` is not on PATH, hard-error with the install hint (`bun run install:bin` in `~/Projects/ndr`); there is no fallback path.
 
 ## Hard rules
 
@@ -49,7 +49,7 @@ Parse `$ARGUMENTS`. If empty, ask the user (do not default silently).
 
 ### 2. Resolve the ledger
 
-Standard resolution, mirroring the CLI's own walk-up: if a `.ndr.toml` exists between the repo root and the filesystem root, use its `ledger` value (relative paths resolve against that file's directory, `~/` expands); otherwise stop and tell the user to run `ndr init` (the CLI itself errors without a config). Pass the resolved path to the agent so it can both flag CLI calls (`--ledger`) and `Read` head files by joined path.
+Standard resolution, mirroring the CLI's own walk-up: if a `.ndr.toml` exists between the repo root and the filesystem root, use its `ledger` value (relative paths resolve against that file's directory, `~/` expands); otherwise stop and tell the user to run `ndr init` (the CLI itself errors without a config). Pass the resolved path to the agent so it can supply `--ledger` on every CLI call, including `ndr resolve <atom-id> --full` for full bodies.
 
 ### 3. Detect repo area hint (optional)
 

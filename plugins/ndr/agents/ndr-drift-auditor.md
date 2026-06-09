@@ -16,7 +16,7 @@ tools:
 
 - **All ledger access goes through the `ndr` CLI** (ndr:0129). `ndr current --verbose` enumerates current heads — the CLI walks supersession chains in-process, so non-heads and retracted atoms never reach you. Never use `obsidian-cli`, MCP vault tools, `find`, or `grep` against the ledger.
 - If `ndr` is not on PATH (`command -v ndr` fails), emit `error: "ndr CLI not installed — run \`bun run install:bin\` in ~/Projects/ndr"` and stop. There is no fallback.
-- **`Read` head files directly for full bodies.** The verbose brief carries only the gist; Decision/Consequences sections and `## Assumptions` callouts are omitted from CLI output by design (ndr:0136). Heads are safe to read — the chain has already been walked; it is *seed* atoms that must never be read.
+- **Pull full bodies through the CLI, not by reading files.** The verbose brief carries only the gist; Decision/Consequences sections and `## Assumptions` callouts are withheld from the brief by design (ndr:0136). Get a head's complete body with `ndr resolve '<ref>' --full` (use the atom-id or basename from the brief); the never-`Read`-the-ledger rule holds for heads and seeds alike. (`ndr show <id>` is available for one specific atom frozen, but the drift audit always wants the current head — use `resolve --full`.)
 - `ndr current` skips malformed atoms with a stderr warning (ndr:0154). Count the warnings for the report, but do not treat them as drift — malformed files are `ndr doctor`'s surface, reported by `ndr-curator`.
 - `Grep`/`Glob`/`Read` against the **repo** (not the ledger) are unrestricted — that is the code side of the audit.
 
@@ -40,7 +40,7 @@ Audit code-vs-decision drift. You enumerate the current decision heads via the `
 
 `diff_scope` is required. The caller is responsible for resolving "what does the user mean by recent" into a concrete spec; you do not negotiate scope.
 
-`ledger` is the resolved ledger directory (the caller applies the `.ndr.toml` walk-up / vault-default resolution). Pass it as `--ledger <ledger>` on every CLI call and join `<ledger>/<basename>` when `Read`ing head files.
+`ledger` is the resolved ledger directory (the caller applies the `.ndr.toml` walk-up / vault-default resolution). Pass it as `--ledger <ledger>` on every CLI call, including `ndr resolve <atom-id> --full` when you need a head's complete body.
 
 ## Method
 
@@ -63,7 +63,7 @@ Audit code-vs-decision drift. You enumerate the current decision heads via the `
 
 3. **Enumerate heads.** `ndr current --ledger <ledger> --verbose`, adding `--area <area_filter>` when the caller set one. Each brief is a head: title + ledger-relative basename on the first line, `area:`/`topic:`/`decision:` line, reversibility, body gist, `Lineage:`, `References:`. Heads-only filtering, supersession walking, and dedup already happened in-process — do not re-filter. Tally stderr `skipping malformed atom` warnings as `malformed_skipped`.
 
-4. **Load head bodies.** For each brief, `Read <ledger>/<basename>` and extract:
+4. **Load head bodies.** For each brief, `ndr resolve <atom-id> --ledger <ledger> --full` (the atom-id is the first field of the brief / basename) and extract:
    - `title:` and atom path
    - **Decision section** body (the affirmative statement; usually under `## Decision`)
    - **Consequences section** body (the deliberately accepted constraints; usually under `## Consequences`)

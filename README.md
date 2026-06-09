@@ -7,8 +7,11 @@ See [CONTEXT.md](./CONTEXT.md) for the domain language and intent of the project
 ## Status
 
 The read API is complete: `ndr resolve` handles all three reference grains
-(atom-id — legacy 4-digit or 6-char base32 — `#slug`, `area/topic`), and
-`ndr search`, `ndr lineage`, and `ndr current` round out the read verbs.
+(atom-id — legacy 4-digit or 6-char base32 — `#slug`, `area/topic`), with
+`--full` to emit the resolved head's complete body instead of the gist, and
+`ndr show <id>` for the frozen full body of one specific atom (including a
+superseded one) without walking the chain. `ndr search`, `ndr lineage`, and
+`ndr current` round out the read verbs.
 Corpus-wide verbs skip a malformed atom with a warning rather than aborting;
 targeted `resolve <id>` still throws. `ndr capture` (the write verb) lands the
 full capture contract: schema + taxonomy validation, vault-wide slug uniqueness,
@@ -62,6 +65,16 @@ ndr resolve '#oxc-stack' --ledger ./test/fixtures/ledger
 
 # Topic grain — list all current heads in an area/topic
 ndr resolve substrate/substrate
+
+# --full — the resolved head's complete body (Decision/Consequences/Assumptions),
+# not just the gist; walks supersession like a normal resolve
+ndr resolve 0070 --full
+
+# show — one specific atom's full raw markdown, frozen (no supersession walk);
+# the only way to read a superseded atom's own body (e.g. an ndr:0042 anchor)
+ndr show 0070 --ledger ./test/fixtures/ledger
+
+# --verbose has no effect on single-atom resolve — it errors and points at --full
 
 # Free-text search across atom title + body
 ndr search okta
