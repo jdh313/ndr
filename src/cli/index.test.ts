@@ -11,6 +11,7 @@ import {
   lineageCommand,
   resolveCommand,
   searchCommand,
+  showCommand,
   statusCommand,
   taxonomyCommand,
 } from "./index.ts";
@@ -104,6 +105,49 @@ describe("ndr resolve <atom-id>", () => {
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("no atom with id 0001");
   });
+
+  test("--full emits the head's complete body (sections the gist omits) plus the brief frame", async () => {
+    const brief = await resolveCommand("0102", FIXTURES);
+    const full = await resolveCommand("0102", FIXTURES, { full: true });
+    expect(full.exitCode).toBe(0);
+    expect(full.stderr).toBe("");
+    // The brief is gist-only; --full carries the sections ndr:0136 withheld.
+    expect(brief.stdout).not.toContain("## Consequences");
+    expect(full.stdout).toContain("## Why");
+    expect(full.stdout).toContain("## Assumptions");
+    expect(full.stdout).toContain("## Consequences");
+    // Still the resolve frame: header, lineage, references.
+    expect(full.stdout).toContain("area: substrate, topic: substrate");
+    expect(full.stdout).toContain("Lineage: 0102");
+    expect(full.stdout).toContain("- ndr:substrate/substrate");
+  });
+
+  test("--full on a superseded seed walks to the head and dumps the head's body with a drift warning", async () => {
+    const result = await resolveCommand("0070", FIXTURES, { full: true });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("⚠ Drift: seed 0070 superseded → head 0102");
+    expect(result.stdout).toContain("## Consequences");
+    expect(result.stdout).toContain("Lineage: 0070 → 0102");
+  });
+
+  test("--full --json adds a body field carrying the complete head body", async () => {
+    const json = JSON.parse(
+      (await resolveCommand("0102", FIXTURES, { full: true, json: true })).stdout,
+    );
+    expect(json.head.body).toContain("## Consequences");
+    expect(typeof json.head.gist).toBe("string");
+    // Plain --json (no --full) stays body-free.
+    const plain = JSON.parse((await resolveCommand("0102", FIXTURES, { json: true })).stdout);
+    expect(plain.head.body).toBeUndefined();
+  });
+
+  test("--verbose on a single atom is rejected and redirects to --full", async () => {
+    const result = await resolveCommand("0102", FIXTURES, { verbose: true });
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("--verbose has no effect on single-atom resolve");
+    expect(result.stderr).toContain("use --full");
+  });
 });
 
 describe("ndr resolve #<slug>", () => {
@@ -138,6 +182,20 @@ describe("ndr resolve #<slug>", () => {
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("no atom with slug #no-such-slug");
   });
+
+  test("--full emits the resolved head's complete body", async () => {
+    const result = await resolveCommand("#oxc-stack", FIXTURES, { full: true });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("(0132-ndr-uses-the-oxc-stack-for-lint-and-format)");
+    expect(result.stdout).toContain("## Consequences");
+    expect(result.stdout).toContain("ndr:#oxc-stack");
+  });
+
+  test("--verbose on a slug is rejected and redirects to --full", async () => {
+    const result = await resolveCommand("#oxc-stack", FIXTURES, { verbose: true });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("--verbose has no effect on single-atom resolve");
+  });
 });
 
 describe("ndr resolve <area>/<topic>", () => {
@@ -157,6 +215,15 @@ describe("ndr resolve <area>/<topic>", () => {
     expect(result.stdout).toContain("0049");
     expect(result.stdout).toContain("0050");
     expect(result.stdout).toContain("References:");
+  });
+
+  test("--full expands each head in the topic to its complete body", async () => {
+    const result = await resolveCommand("tooling/referencing", FIXTURES, { full: true });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("0049");
+    expect(result.stdout).toContain("0050");
+    // Full bodies, not just gist — at least one head carries a Consequences section.
+    expect(result.stdout).toContain("## Consequences");
   });
 
   test("topic grain with no current atoms exits 1", async () => {
@@ -203,6 +270,54 @@ describe("ndr lineage <id>", () => {
     const result = await lineageCommand("abc", FIXTURES);
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("lineage takes an atom-id");
+  });
+});
+
+describe("ndr show <id>", () => {
+  test("prints the atom's raw file verbatim (frontmatter + body)", async () => {
+    const result = await showCommand("0102", FIXTURES);
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    // Frontmatter fence and body sections both present — byte-equivalent to a Read.
+    expect(result.stdout.startsWith("---\n")).toBe(true);
+    expect(result.stdout).toContain("id: '0102'");
+    expect(result.stdout).toContain("## Consequences");
+  });
+
+  test("is frozen — a superseded atom returns its OWN body, no walk to the head", async () => {
+    const result = await showCommand("0070", FIXTURES);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("status: superseded");
+    expect(result.stdout).toContain("# 0070 — NDR adopts hybrid architecture");
+    // Must NOT have walked to the 0102 head.
+    expect(result.stdout).not.toContain("Markdown remains canonical");
+    expect(result.stdout).not.toContain("Drift");
+  });
+
+  test("--json returns the frontmatter fields plus a body field", async () => {
+    const json = JSON.parse((await showCommand("0070", FIXTURES, { json: true })).stdout);
+    expect(json.kind).toBe("atom");
+    expect(json.id).toBe("0070");
+    expect(json.status).toBe("superseded");
+    expect(json.body).toContain("## Decision");
+  });
+
+  test("rejects non-atom-id grains (slug, area/topic) and points at resolve", async () => {
+    const slug = await showCommand("#oxc-stack", FIXTURES);
+    expect(slug.exitCode).toBe(1);
+    expect(slug.stderr).toContain("show takes an atom-id");
+    expect(slug.stderr).toContain("use resolve");
+
+    const topic = await showCommand("substrate/substrate", FIXTURES);
+    expect(topic.exitCode).toBe(1);
+    expect(topic.stderr).toContain("show takes an atom-id");
+  });
+
+  test("missing atom exits 1 with a not-found message", async () => {
+    const result = await showCommand("9999", FIXTURES);
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("no atom with id 9999");
   });
 });
 

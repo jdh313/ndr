@@ -46,6 +46,7 @@ export interface ResolveResult {
 
 export interface ListOptions {
   readonly verbose?: boolean;
+  readonly full?: boolean;
   readonly json?: boolean;
 }
 
@@ -92,13 +93,29 @@ export async function run(argv: readonly string[]): Promise<number> {
     .command("resolve <ref>")
     .description("Resolve an ndr reference (atom-id, #slug, or area/topic) and print a brief.")
     .option("--ledger <path>", "Ledger directory to resolve against (default: .ndr.toml walk-up).")
-    .option("--verbose", "Expand multi-atom results to full briefs.", false)
+    .option("--verbose", "Expand multi-atom (area/topic) results to full briefs.", false)
+    .option(
+      "--full",
+      "Emit the head's complete body (every section) instead of the gist; for area/topic, every head.",
+      false,
+    )
     .option("--json", "Emit structured JSON instead of the human brief.", false)
-    .action(async (ref: string, options: { ledger?: string; verbose: boolean; json: boolean }) => {
-      const ledger = resolveLedger(options.ledger);
-      if (ledger === null) return;
-      emit(await resolveCommand(ref, ledger, { verbose: options.verbose, json: options.json }));
-    });
+    .action(
+      async (
+        ref: string,
+        options: { ledger?: string; verbose: boolean; full: boolean; json: boolean },
+      ) => {
+        const ledger = resolveLedger(options.ledger);
+        if (ledger === null) return;
+        emit(
+          await resolveCommand(ref, ledger, {
+            verbose: options.verbose,
+            full: options.full,
+            json: options.json,
+          }),
+        );
+      },
+    );
 
   program
     .command("search <query>")
@@ -123,6 +140,23 @@ export async function run(argv: readonly string[]): Promise<number> {
       const ledger = resolveLedger(options.ledger);
       if (ledger === null) return;
       emit(await lineageCommand(id, ledger, { json: options.json }));
+    });
+
+  program
+    .command("show <id>")
+    .description(
+      "Print one atom's full raw markdown, frozen — no supersession walk (works on superseded atoms). Use resolve --full for the current head.",
+    )
+    .option("--ledger <path>", "Ledger directory to read (default: .ndr.toml walk-up).")
+    .option(
+      "--json",
+      "Emit structured JSON (frontmatter fields + body) instead of raw markdown.",
+      false,
+    )
+    .action(async (id: string, options: { ledger?: string; json: boolean }) => {
+      const ledger = resolveLedger(options.ledger);
+      if (ledger === null) return;
+      emit(await showCommand(id, ledger, { json: options.json }));
     });
 
   program
@@ -249,16 +283,20 @@ export async function resolveCommand(
   opts: ListOptions = {},
 ): Promise<ResolveResult> {
   const adapter = new MarkdownLedgerAdapter(ledgerPath);
-  const json = opts.json ?? false;
+  const resolveOpts: ResolveOpts = {
+    json: opts.json ?? false,
+    verbose: opts.verbose ?? false,
+    full: opts.full ?? false,
+  };
 
   if (ref.startsWith("#")) {
-    return await resolveSlug(adapter, ref.slice(1), ledgerPath, json);
+    return await resolveSlug(adapter, ref.slice(1), ledgerPath, resolveOpts);
   }
   if (ref.includes("/")) {
-    return await resolveTopic(adapter, ref, ledgerPath, opts.verbose ?? false, json);
+    return await resolveTopic(adapter, ref, ledgerPath, resolveOpts);
   }
   if (ATOM_ID_REF.test(ref)) {
-    return await resolveAtomId(adapter, ref, ledgerPath, json);
+    return await resolveAtomId(adapter, ref, ledgerPath, resolveOpts);
   }
   return {
     stdout: "",
@@ -267,12 +305,32 @@ export async function resolveCommand(
   };
 }
 
+interface ResolveOpts {
+  readonly json: boolean;
+  readonly verbose: boolean;
+  readonly full: boolean;
+}
+
+// `--verbose` is meaningless on single-atom resolve — that form is always at
+// least a full brief, so there is nothing to "expand". Reject it and point the
+// caller at the flag they actually want (ndr:0136 successor).
+function rejectVerboseOnSingleAtom(): ResolveResult {
+  return {
+    stdout: "",
+    stderr:
+      "--verbose has no effect on single-atom resolve (the brief is always shown) — use --full for the complete body\n",
+    exitCode: 1,
+  };
+}
+
 async function resolveAtomId(
   adapter: MarkdownLedgerAdapter,
   ref: string,
   ledgerPath: string,
-  json: boolean,
+  opts: ResolveOpts,
 ): Promise<ResolveResult> {
+  if (opts.verbose && !opts.full) return rejectVerboseOnSingleAtom();
+
   let chain: Atom[];
   try {
     chain = await adapter.walkLineage(asAtomId(ref));
@@ -289,19 +347,20 @@ async function resolveAtomId(
 
   const head = chain[chain.length - 1]!;
   const headFilename = await adapter.getAtomFilename(asAtomId(head.frontmatter.id));
-  if (json) return jsonResult(briefJson(chain, headFilename));
-  return { stdout: formatBrief(chain, headFilename), stderr: "", exitCode: 0 };
+  if (opts.json) return jsonResult(briefJson(chain, headFilename, opts.full));
+  return { stdout: formatBrief(chain, headFilename, opts.full), stderr: "", exitCode: 0 };
 }
 
 async function resolveSlug(
   adapter: MarkdownLedgerAdapter,
   slug: string,
   ledgerPath: string,
-  json: boolean,
+  opts: ResolveOpts,
 ): Promise<ResolveResult> {
   if (slug.length === 0) {
     return { stdout: "", stderr: "empty slug reference — use #<slug>\n", exitCode: 1 };
   }
+  if (opts.verbose && !opts.full) return rejectVerboseOnSingleAtom();
 
   const head = await adapter.findBySlug(slug);
   if (head === null) {
@@ -315,16 +374,15 @@ async function resolveSlug(
   // A slug tracks forward to the head, so there is no drift to surface
   // (ndr:0049, ndr:0050) — render the head alone.
   const headFilename = await adapter.getAtomFilename(asAtomId(head.frontmatter.id));
-  if (json) return jsonResult(briefJson([head], headFilename));
-  return { stdout: formatBrief([head], headFilename), stderr: "", exitCode: 0 };
+  if (opts.json) return jsonResult(briefJson([head], headFilename, opts.full));
+  return { stdout: formatBrief([head], headFilename, opts.full), stderr: "", exitCode: 0 };
 }
 
 async function resolveTopic(
   adapter: MarkdownLedgerAdapter,
   ref: string,
   ledgerPath: string,
-  verbose: boolean,
-  json: boolean,
+  opts: ResolveOpts,
 ): Promise<ResolveResult> {
   const parts = ref.split("/");
   if (parts.length !== 2 || parts[0]!.length === 0 || parts[1]!.length === 0) {
@@ -338,7 +396,7 @@ async function resolveTopic(
   const [area, topic] = parts as [string, string];
   const atoms = await adapter.listCurrent({ area, topic });
   if (atoms.length === 0) {
-    if (json) return jsonResult({ kind: "list", count: 0, atoms: [] });
+    if (opts.json) return jsonResult({ kind: "list", count: 0, atoms: [] });
     return {
       stdout: "",
       stderr: `no current atoms for ${area}/${topic} in ledger ${ledgerPath}\n`,
@@ -346,8 +404,58 @@ async function resolveTopic(
     };
   }
 
-  if (json) return jsonResult(await listJson(atoms, adapter));
-  return { stdout: await formatAtomList(atoms, verbose, adapter), stderr: "", exitCode: 0 };
+  if (opts.json) return jsonResult(await listJson(atoms, adapter, opts.full));
+  return {
+    stdout: await formatAtomList(atoms, opts.verbose, opts.full, adapter),
+    stderr: "",
+    exitCode: 0,
+  };
+}
+
+// `ndr show <atom-id>` — the frozen, point-in-time read. Unlike resolve, it does
+// NOT walk the supersession chain: it returns exactly the atom asked for, even a
+// superseded one (the historical anchor behind an `ndr:0042` code reference).
+// Plain output is the raw file, byte-equivalent to reading it directly.
+export async function showCommand(
+  ref: string,
+  ledgerPath: string,
+  opts: { json?: boolean } = {},
+): Promise<ResolveResult> {
+  if (!ATOM_ID_REF.test(ref)) {
+    return {
+      stdout: "",
+      stderr: `invalid atom-id ${JSON.stringify(ref)} — show takes an atom-id (4-digit or 6-char base32); use resolve for #<slug> or <area>/<topic>\n`,
+      exitCode: 1,
+    };
+  }
+
+  const adapter = new MarkdownLedgerAdapter(ledgerPath);
+  const notFound: ResolveResult = {
+    stdout: "",
+    stderr: `no atom with id ${ref} in ledger ${ledgerPath}\n`,
+    exitCode: 1,
+  };
+
+  if (opts.json) {
+    let atom: Atom;
+    try {
+      atom = await adapter.getAtom(asAtomId(ref));
+    } catch (err) {
+      if (err instanceof AtomNotFoundError) return notFound;
+      throw err;
+    }
+    const filename = await adapter.getAtomFilename(asAtomId(ref));
+    return jsonResult({ kind: "atom", ...atomSummary(atom, filename, true) });
+  }
+
+  let raw: string;
+  try {
+    raw = await adapter.getRawAtom(asAtomId(ref));
+  } catch (err) {
+    if (err instanceof AtomNotFoundError) return notFound;
+    throw err;
+  }
+  return { stdout: raw.endsWith("\n") ? raw : raw + "\n", stderr: "", exitCode: 0 };
 }
 
 export async function searchCommand(
@@ -364,7 +472,7 @@ export async function searchCommand(
   }
 
   return {
-    stdout: await formatAtomList(sorted, opts.verbose ?? false, adapter),
+    stdout: await formatAtomList(sorted, opts.verbose ?? false, false, adapter),
     stderr: "",
     exitCode: 0,
   };
@@ -431,7 +539,7 @@ export async function currentCommand(
   // that parse it; the user still sees the summary in the terminal.
   const noun = atoms.length === 1 ? "atom" : "atoms";
   return {
-    stdout: await formatAtomList(atoms, opts.verbose ?? false, adapter),
+    stdout: await formatAtomList(atoms, opts.verbose ?? false, false, adapter),
     stderr: `${atoms.length} current ${noun}${describeScope(opts.area, opts.topic)}\n`,
     exitCode: 0,
   };
@@ -912,9 +1020,16 @@ function atomReferences(fm: Atom["frontmatter"]): string[] {
   return [`ndr:${fm.id}`, ...fm.aliases.map(slugRef), `ndr:${fm.area}/${fm.topic}`];
 }
 
-function atomSummary(atom: Atom, filename: string | null): Record<string, unknown> {
+// `includeBody` rides the `--full` flag through the JSON path: the gist stays
+// (cheap, always useful) and the complete body is added alongside it so a caller
+// gets everything in one read (ndr:0136 successor).
+function atomSummary(
+  atom: Atom,
+  filename: string | null,
+  includeBody = false,
+): Record<string, unknown> {
   const fm = atom.frontmatter;
-  return {
+  const summary: Record<string, unknown> = {
     id: fm.id,
     title: fm.title,
     area: fm.area,
@@ -925,9 +1040,15 @@ function atomSummary(atom: Atom, filename: string | null): Record<string, unknow
     path: filename ? filename.replace(/\.md$/, "") : null,
     gist: extractGist(atom.body),
   };
+  if (includeBody) summary.body = atom.body;
+  return summary;
 }
 
-function briefJson(chain: readonly Atom[], headFilename: string | null): Record<string, unknown> {
+function briefJson(
+  chain: readonly Atom[],
+  headFilename: string | null,
+  full = false,
+): Record<string, unknown> {
   const seed = chain[0]!;
   const head = chain[chain.length - 1]!;
   return {
@@ -935,7 +1056,7 @@ function briefJson(chain: readonly Atom[], headFilename: string | null): Record<
     drift: seed.frontmatter.id !== head.frontmatter.id,
     seed_id: seed.frontmatter.id,
     head_id: head.frontmatter.id,
-    head: atomSummary(head, headFilename),
+    head: atomSummary(head, headFilename, full),
     lineage: chain.map((a) => a.frontmatter.id),
     references: atomReferences(head.frontmatter),
   };
@@ -944,16 +1065,21 @@ function briefJson(chain: readonly Atom[], headFilename: string | null): Record<
 async function listJson(
   atoms: readonly Atom[],
   adapter: MarkdownLedgerAdapter,
+  full = false,
 ): Promise<Record<string, unknown>> {
   const summaries = await Promise.all(
     atoms.map(async (a) =>
-      atomSummary(a, await adapter.getAtomFilename(asAtomId(a.frontmatter.id))),
+      atomSummary(a, await adapter.getAtomFilename(asAtomId(a.frontmatter.id)), full),
     ),
   );
   return { kind: "list", count: summaries.length, atoms: summaries };
 }
 
-export function formatBrief(chain: readonly Atom[], headFilename: string | null): string {
+export function formatBrief(
+  chain: readonly Atom[],
+  headFilename: string | null,
+  full = false,
+): string {
   const seed = chain[0]!;
   const head = chain[chain.length - 1]!;
   const drifted = seed.frontmatter.id !== head.frontmatter.id;
@@ -972,10 +1098,18 @@ export function formatBrief(chain: readonly Atom[], headFilename: string | null)
   lines.push(`  reversibility: ${fm.reversibility}`);
   lines.push("");
 
-  const gist = extractGist(head.body);
-  if (gist !== null) {
-    lines.push(gist);
-    lines.push("");
+  if (full) {
+    const body = head.body.trim();
+    if (body.length > 0) {
+      lines.push(body);
+      lines.push("");
+    }
+  } else {
+    const gist = extractGist(head.body);
+    if (gist !== null) {
+      lines.push(gist);
+      lines.push("");
+    }
   }
 
   const lineageIds = chain.map((atom) => atom.frontmatter.id);
@@ -993,25 +1127,29 @@ export function formatBrief(chain: readonly Atom[], headFilename: string | null)
 }
 
 // Compact one-line summary used by the list verbs (search, current, resolve
-// area/topic) when --verbose is not set.
+// area/topic) when neither --verbose nor --full is set.
 function formatCompactLine(atom: Atom): string {
   const fm = atom.frontmatter;
   return `${fm.id}  ${fm.title}  [${fm.area}/${fm.topic}]`;
 }
 
+// `full` is the top rung of the verbosity ladder (compact → brief → full) and
+// implies expansion, so it overrides `verbose`: each head renders as a full
+// brief carrying its complete body.
 async function formatAtomList(
   atoms: readonly Atom[],
   verbose: boolean,
+  full: boolean,
   adapter: MarkdownLedgerAdapter,
 ): Promise<string> {
-  if (!verbose) {
+  if (!verbose && !full) {
     return atoms.map(formatCompactLine).join("\n") + "\n";
   }
 
   const blocks: string[] = [];
   for (const atom of atoms) {
     const filename = await adapter.getAtomFilename(asAtomId(atom.frontmatter.id));
-    blocks.push(formatBrief([atom], filename));
+    blocks.push(formatBrief([atom], filename, full));
   }
   return blocks.join("\n");
 }
