@@ -2,6 +2,18 @@
 
 Capture and resolution tooling for nested decision records.
 
+This file fixes the project's vocabulary — the canonical term for each concept
+in ndr, used consistently across the code, the docs, and the decision atoms
+themselves. If you're contributing, reach for these words; if you're reading and
+a term is unfamiliar, this is the place to look it up.
+
+Each entry gives a definition and, where two concepts are easy to conflate, an
+_Avoid_ line listing the synonyms we deliberately **don't** use (e.g. `head` and
+`current` describe the same atom but from different angles, so we keep them
+distinct). The _Avoid_ lines are shared naming discipline, not a private style
+preference — sticking to one word per concept keeps search, code, and decision
+history aligned.
+
 ## Language
 
 **alias**
