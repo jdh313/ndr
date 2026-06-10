@@ -1,82 +1,77 @@
 # ndr
 
-Capture and resolution tooling for nested decision records.
+Capture engineering decisions as small, linked markdown files so that when a
+decision is later revised, the change is **structurally visible** instead of
+something you rediscover in hindsight.
 
-See [CONTEXT.md](./CONTEXT.md) for the domain language and intent of the project.
+Every decision is a single file (an **atom**). When you revise one, the old
+file stays put and gains a pointer to its replacement; reads always follow that
+chain to the current version (the **head**). Pointing at a decision from old
+code and landing on a superseded atom is called **drift** — surfacing it is the
+whole point.
 
-## Status
+New to the vocabulary (atom, head, ledger, supersession, grain, drift)? See
+[CONTEXT.md](./CONTEXT.md) for the glossary. The terms below are glossed on
+first use.
 
-The read API is complete: `ndr resolve` handles all three reference grains
-(atom-id — legacy 4-digit or 6-char base32 — `#slug`, `area/topic`), with
-`--full` to emit the resolved head's complete body instead of the gist, and
-`ndr show <id>` for the frozen full body of one specific atom (including a
-superseded one) without walking the chain. `ndr search`, `ndr lineage`, and
-`ndr current` round out the read verbs.
-Corpus-wide verbs skip a malformed atom with a warning rather than aborting;
-targeted `resolve <id>` still throws. `ndr capture` (the write verb) lands the
-full capture contract: schema + taxonomy validation, vault-wide slug uniqueness,
-three-write supersession with alias handover, and locally-generated base32 ids
-(ndr:0144). It reads a draft as JSON on stdin and maps outcomes to exit codes
-0 (ok) / 1 (validation) / 2 (supersession conflict) / 3 (mid-write half-state).
-`ndr doctor` runs corpus health checks over a ledger (absorbing the
-ndr-curator agent's mechanical sweep): bidirectional supersession integrity,
-orphan refs, status coherence, alias drift, taxonomy violations, missing
-required fields, frontmatter/body drift, and malformed files. Read-only by
-default; `--fix` repairs exactly one class — missing `superseded_by`
-back-links — idempotently. Exit codes 0 (healthy) / 1 (findings) / 3 (a
-repair write failed).
+## Quickstart
 
-The Claude Code plugin (skills `/decisions`, `/ground`, `/capture-decision`,
-`/drift-check` + agents) is co-located in `plugins/ndr/` and served from this
-repo's own marketplace (`ndr@ndr`, ndr:h7vdvf) — the skills route every NDR
-operation through this CLI (ndr:0129). The cc-marketplace copy is deprecated.
+```sh
+# Build the CLI and link it onto your PATH (compiles src/cli/bin.ts -> dist/ndr,
+# then symlinks it into ~/.local/bin)
+bun run install:bin
 
-The library exports:
+# Opt a repo in: writes .ndr.toml, a ./decisions ledger, a starter taxonomy,
+# and the grounding rule in .claude/rules/ndr.md. Idempotent.
+ndr init
 
-- `Atom`, `AtomId`, `Slug`, `Reference`, `Ledger` — domain types (`src/domain/`).
-- `ReadPort`, `WritePort` — backend interfaces (`src/ports/`).
-- `MarkdownLedgerAdapter` — first concrete adapter, reads/writes a directory
-  of `<id>-<kebab-title>.md` files. Parse pipeline is fence split → eemeli/yaml
-  → Zod; see `ndr:0134`.
+# Confirm how ndr is wired here (ledger, atom counts, taxonomy, grounding marker)
+ndr status
+
+# Read the decision that currently governs a topic
+ndr resolve 0102
+```
+
+A **ledger** is one directory of decision atoms. Every `ndr` command resolves
+which ledger to use in this order: `--ledger` flag > `NDR_LEDGER` env var >
+the nearest `.ndr.toml` walking up from the current directory > an error
+pointing you at `ndr init`. There is no built-in default ledger; a personal
+catch-all is just a `.ndr.toml` higher up the walk (e.g. at `~`).
+
+```toml
+# .ndr.toml — written by `ndr init`
+ledger = "./decisions"   # required; relative paths resolve against this file, ~/ expands
+project = "[[my-repo]]"  # optional project wikilink
+```
 
 ## Usage
 
 ```sh
-# Initialize a repo for ndr: .ndr.toml, ./decisions ledger, starter
-# .taxonomy/, and the grounding rule in .claude/rules/ndr.md. Idempotent.
-ndr init
-
-# Report how ndr is wired up here: ledger + source, atom counts, taxonomy,
-# grounding marker. Never errors — reports "(none)" when unconfigured.
-ndr status
-
-# Resolve an atom id — ledger resolves as: --ledger flag > NDR_LEDGER env >
-# .ndr.toml walk-up from CWD > error pointing at `ndr init`
+# Resolve an atom id (legacy 4-digit or 6-char base32)
 ndr resolve 0102
 
-# Drift signal — seed atom 0070 was superseded; output names head 0102
+# Drift in action — atom 0070 was superseded, so the output names its head, 0102
 ndr resolve 0070
 
 # Point at a different ledger directory
 ndr resolve 0049 --ledger ./test/fixtures/ledger
 
-# Slug grain — resolve a minted alias to its current head (no drift)
+# Slug grain — resolve a minted alias to its current head (slugs track forward,
+# so there is no drift to surface)
 ndr resolve '#oxc-stack' --ledger ./test/fixtures/ledger
 
-# Topic grain — list all current heads in an area/topic
+# Topic grain — list every current head in an area/topic pair
 ndr resolve substrate/substrate
 
-# --full — the resolved head's complete body (Decision/Consequences/Assumptions),
-# not just the gist; walks supersession like a normal resolve
+# --full — the resolved head's complete body (Decision / Consequences /
+# Assumptions), not just the one-line gist; still walks supersession
 ndr resolve 0070 --full
 
-# show — one specific atom's full raw markdown, frozen (no supersession walk);
-# the only way to read a superseded atom's own body (e.g. an ndr:0042 anchor)
+# show — one specific atom's full raw markdown, frozen (no supersession walk).
+# The only way to read a superseded atom's own body (e.g. an ndr:0042 anchor).
 ndr show 0070 --ledger ./test/fixtures/ledger
 
-# --verbose has no effect on single-atom resolve — it errors and points at --full
-
-# Free-text search across atom title + body
+# Free-text search across atom titles + bodies
 ndr search okta
 
 # Walk a supersession chain explicitly
@@ -86,7 +81,7 @@ ndr lineage 0070
 ndr current --area tooling
 ndr current --area tooling --topic lint-format --verbose
 
-# Any read verb takes --json for structured output (skills/library consumers)
+# Any read verb takes --json for structured output (consumed by the skills/library)
 ndr resolve 0070 --json
 ndr current --json
 
@@ -94,45 +89,64 @@ ndr current --json
 ndr areas
 ndr topics --json
 
-# Capture a decision atom — draft JSON from a file or stdin, prints the written
-# {id, path, superseded, aliases_moved}. --ledger > NDR_LEDGER > vault_decisions.
+# Capture a decision atom — draft JSON from a file or stdin. Prints the written
+# {id, path, superseded, aliases_moved}. Exit codes: 0 ok / 1 validation /
+# 2 supersession conflict / 3 mid-write half-state.
 ndr capture draft.json --ledger ./test/fixtures/ledger
 echo "$DRAFT_JSON" | ndr capture --ledger ./test/fixtures/ledger
 
 # Corpus health checks — grouped human report, exit 1 when findings exist
 ndr doctor --ledger ./test/fixtures/doctor-ledger
-
-# Structured report for machine consumers
-ndr doctor --json
-
-# Repair missing superseded_by back-links (the one auto-fixable class)
-ndr doctor --fix
+ndr doctor --json                 # structured report for machine consumers
+ndr doctor --fix                  # repair missing superseded_by back-links (the one auto-fixable class)
 ```
 
-Brief shape, drift placement, and basename sourcing are pinned by `ndr:0136`.
+A present-but-broken `.ndr.toml` fails loudly rather than silently falling
+back. `ndr status` reports the unconfigured case instead of erroring.
 
-A repo opts into a ledger with `.ndr.toml` at its root (`ndr init` scaffolds
-it) — `ledger` (required; relative paths resolve against the file, `~/`
-expands) and `project` (optional). `NDR_LEDGER` overrides the config for a
-shell session (only `--ledger` beats it). No flag, env, or file anywhere up the
-walk means an error; a broken file fails loudly instead of falling back.
+## What works today
 
-```toml
-ledger = "./decisions"
-project = "[[my-repo]]"
-```
+- **Reads** — `ndr resolve` handles all three reference grains (atom-id, `#slug`,
+  `area/topic`), with `--full` for the head's complete body and `ndr show` for a
+  single atom's frozen body without walking the chain. `ndr search`, `ndr lineage`,
+  and `ndr current` round out the read verbs. Corpus-wide verbs skip a malformed
+  atom with a warning; targeted `resolve <id>` still throws.
+- **Writes** — `ndr capture` lands the full contract: schema + taxonomy validation,
+  vault-wide slug uniqueness, three-write supersession with alias handover, and
+  locally-generated base32 ids. Reads a draft as JSON on stdin.
+- **Health** — `ndr doctor` runs corpus checks over a ledger: bidirectional
+  supersession integrity, orphan refs, status coherence, alias drift, taxonomy
+  violations, missing fields, frontmatter/body drift, and malformed files.
+  Read-only by default; `--fix` repairs missing `superseded_by` back-links idempotently.
+
+## The library
+
+The CLI sits on a small library you can import directly:
+
+- `Atom`, `AtomId`, `Slug`, `Reference`, `Ledger` — domain types (`src/domain/`).
+- `ReadPort`, `WritePort` — backend interfaces (`src/ports/`).
+- `MarkdownLedgerAdapter` — the first concrete adapter; reads/writes a directory
+  of `<id>-<kebab-title>.md` files. Its parse pipeline is fence split ->
+  eemeli/yaml -> Zod.
 
 ## Plugin
+
+A Claude Code plugin (skills `/decisions`, `/ground`, `/capture-decision`,
+`/drift-check`, plus supporting agents) is co-located in `plugins/ndr/` and
+served from this repo's own marketplace. The skills are thin orchestration over
+this CLI.
 
 ```
 /plugin marketplace add ~/Projects/ndr
 /plugin install ndr@ndr
 ```
 
-Requires the `ndr` binary on PATH (`bun run install:bin`) — the skills
-hard-error without it. See `plugins/ndr/README.md`.
+The plugin requires the `ndr` binary on PATH (`bun run install:bin`) — the
+skills hard-error without it. See [plugins/ndr/README.md](./plugins/ndr/README.md).
 
-## Layout
+## Contributing
+
+### Layout
 
 ```
 src/
@@ -145,7 +159,7 @@ plugins/
               .claude-plugin/marketplace.json at the repo root
 ```
 
-## Development
+### Development
 
 ```sh
 bun install
@@ -158,20 +172,25 @@ bun run typecheck
 CI (GitHub Actions) runs the same gates — test, lint, `format:check`,
 typecheck, plus a `bun build --compile` smoke — on every push and PR to `main`.
 
-## Build & install
+### Build & install
 
-`ndr` ships as a single-file binary compiled by Bun. One command builds it and
-links it onto your PATH:
+`ndr` ships as a single-file binary compiled by Bun. `bun run install:bin`
+compiles `src/cli/bin.ts` to `dist/ndr` and symlinks it into `~/.local/bin`.
+`bun run build` alone just emits `dist/ndr` (gitignored); because the install is
+a symlink, a later `bun run build` updates the installed binary in place — no
+re-link needed. Built and tested against Bun 1.3.x.
 
-```sh
-# Compile src/cli/bin.ts → dist/ndr, then symlink it into ~/.local/bin
-bun run install:bin
-```
+## Decisions behind this design
 
-`bun run build` alone just emits `dist/ndr` (gitignored). The symlink means a
-later `bun run build` updates the installed binary in place — no re-link needed.
-The binary resolves its ledger per-invocation: `--ledger` flag, else the
-`NDR_LEDGER` env var, else the nearest `.ndr.toml` walking up from the CWD,
-else an error pointing at `ndr init`. There is no built-in default ledger — a
-personal default is a `.ndr.toml` higher up the walk (e.g. at `~`). Built and
-tested against Bun 1.3.x.
+ndr documents its own design in its decision ledger. Resolve any of these with
+`ndr resolve <id>` (a live demo of the tool working on itself):
+
+- `ndr:0129` — skills and the library route every operation through the CLI, so
+  supersession-awareness has one tested implementation.
+- `ndr:0144` — atom ids are locally generated 6-char Crockford base32, not
+  sequential; legacy 4-digit ids are frozen.
+- `ndr:0134` — the markdown adapter's layered parse pipeline (fence split ->
+  yaml -> Zod).
+- `ndr:0136` — brief shape, drift placement, and basename sourcing.
+- `ndr:h7vdvf` — the plugin is co-located with the CLI and served from this
+  repo's own marketplace.

@@ -1,8 +1,15 @@
 # ndr — Nested Decision Records
 
-A personal-discipline plugin for capturing engineering decisions as **atomic markdown artifacts** with explicit lineage and **supersession-aware reading**, so cross-session decision drift becomes structurally visible rather than discoverable in hindsight.
+A Claude Code plugin for capturing engineering decisions as **atomic markdown
+files** with explicit lineage and **supersession-aware reading**, so
+cross-session decision drift becomes structurally visible rather than something
+you rediscover in hindsight.
 
-All corpus operations route through the **`ndr` CLI** that lives in this repo (ndr:0129) — the CLI walks supersession chains in-process, owns id assignment and the supersession write transaction, and resolves the ledger per-repo via `.ndr.toml`. The skills are thin orchestration over it.
+All corpus operations route through the **`ndr` CLI** that lives in this repo —
+the CLI walks supersession chains in-process, owns id assignment and the
+supersession write transaction, and resolves the ledger per-repo via
+`.ndr.toml`. The skills are thin orchestration over it. For the CLI, the library,
+and the shared ledger/config model, see the [repo-root README](../../README.md).
 
 ## What it does
 
@@ -12,18 +19,12 @@ All corpus operations route through the **`ndr` CLI** that lives in this repo (n
 | `/decisions <topic>` | Manual, when the user has a topic or `ndr:` ref in hand | Structured refs resolve with one `ndr resolve` call (drift surfaced automatically); free-text dispatches `@ndr-reader` for search + synthesis |
 | `/ground [scope]` | Before substantive code work, or before delegating to a coding subagent (junior-dev / senior-dev / tech-lead) | Infers scope from CWD / `.ndr.toml` / file path / user phrase, queries the CLI (or `@ndr-reader` for fuzzy scopes), returns a brief plus `ndr:` reference strings the delegating prompt can paste in |
 | `/drift-check [scope]` | Manual, or offered by `spec-flow:close` before archiving | Walks current heads, compares each against a chosen diff scope (working tree / branch range / commit range / full repo), surfaces divergences with three resolutions per item — amend, supersede, revert |
-| `/ndr-bootstrap` | Once per machine after plugin install | Copies seed decision atoms, the Obsidian Base, and the initial taxonomy YAML into `~/Loose Ends/`. Idempotent |
+| `/ndr-bootstrap` | Once per machine after plugin install | Copies the seed decision atoms, the Obsidian Base, and the initial taxonomy YAML into the author's Obsidian vault at `~/Loose Ends/` (currently hardcoded). Idempotent |
 
 ## Install
 
-The plugin requires the `ndr` binary on PATH — skills hard-error without it:
-
-```sh
-# In this repo (~/Projects/ndr): compile + symlink into ~/.local/bin
-bun run install:bin
-```
-
-Then install the plugin from this repo's marketplace:
+The plugin requires the `ndr` binary on PATH — skills hard-error without it.
+Build it from the repo root (`bun run install:bin`), then:
 
 ```
 /plugin marketplace add ~/Projects/ndr
@@ -32,24 +33,27 @@ Then install the plugin from this repo's marketplace:
 ```
 
 After install:
-- Decisions live as `<ledger>/<id>-<kebab-title>.md` — one atom per file, always single-file. The ledger resolves per-invocation: `--ledger` flag > `NDR_LEDGER` env > `.ndr.toml` walk-up from CWD > error pointing at `ndr init`. `ndr status` reports which won.
-- New atoms get 6-char base32 ids assigned by `ndr capture` (ndr:0144); legacy 4-digit ids are frozen.
-- Each atom uses a **hybrid altitude body**: heading + one-line gist for every section, with deeper texture in default-collapsed `[!info]-` / `[!warning]-` callouts.
-- The Obsidian Base at `~/Loose Ends/Bases/Current Decisions.base` gives a faceted rollup (cards, tables, by area, superseded chain).
-- Taxonomy (`area:`, `topic:`) lives at `<ledger>/.taxonomy/{areas,topics}.yaml`. `ndr capture` validates against these lists.
+- Decisions live as `<ledger>/<id>-<kebab-title>.md` — one atom per file, always
+  single-file. The ledger resolves per-invocation (see the [root README](../../README.md)
+  for the resolution order); `ndr status` reports which source won.
+- New atoms get 6-char base32 ids assigned by `ndr capture`; legacy 4-digit ids
+  are frozen.
+- Each atom uses a **hybrid-altitude body**: a heading + one-line gist for every
+  section, with deeper texture in default-collapsed `[!info]-` / `[!warning]-`
+  callouts — the right detail at the right time.
+- The Obsidian Base at `~/Loose Ends/Bases/Current Decisions.base` gives a
+  faceted rollup (cards, tables, by area, superseded chain).
+- Taxonomy (`area:`, `topic:`) lives at `<ledger>/.taxonomy/{areas,topics}.yaml`.
+  `ndr capture` validates against these lists.
 
 ## Per-repo config
 
-`ndr init` opts a repo in — it scaffolds `.ndr.toml`, the ledger directory
-with a starter `.taxonomy/`, and the grounding rule in `.claude/rules/ndr.md`
-(auto-loaded by Claude Code at session start), all idempotently. The config it writes:
-
-```toml
-ledger = "./decisions"     # required; relative paths resolve against this file, ~/ expands
-project = "[[my-repo]]"    # optional project wikilink
-```
-
-There is no built-in default ledger — every CWD needs a `.ndr.toml` somewhere up the walk (a `~/.ndr.toml` makes a personal ledger the catch-all). See `references/workflow.md#opting-a-repo-into-ndr-coverage`.
+`ndr init` opts a repo in — it scaffolds `.ndr.toml`, the ledger directory with a
+starter `.taxonomy/`, and the grounding rule in `.claude/rules/ndr.md`
+(auto-loaded by Claude Code at session start), all idempotently. The config and
+ledger-resolution model are documented in the [root README](../../README.md); the
+grounding rule is what makes `/ground` fire before substantive code work in a
+tracked repo. See `references/workflow.md#opting-a-repo-into-ndr-coverage`.
 
 ## Plugin layout
 
@@ -85,20 +89,51 @@ plugins/ndr/
         └── topics.yaml
 ```
 
-The CLI itself lives in this repo's `src/` (Commander entry points, domain types, markdown ledger adapter) — see the repo-root `README.md`.
+The CLI itself lives in this repo's `src/` (Commander entry points, domain
+types, markdown ledger adapter) — see the [root README](../../README.md).
 
 ## Conventions
 
-- **Atomic decisions.** One chosen path, one set of consequences. Bundled decisions get split.
-- **Supersession-aware reading.** When a decision is revised, the old artifact stays, gets `status: superseded` + a `superseded_by:` pointer; the successor carries `supersedes:`. Resolution always lands on the head — `ndr resolve` walks the chain and surfaces drift.
-- **Hybrid altitude body.** Each section: heading + one-sentence gist + (optional) default-collapsed callout. Right detail at the right time.
-- **Required frontmatter.** `ndr capture` refuses to write if any required field is missing (`title`, `status`, `decision_date`, `project`, `area`, `topic`, `reversibility`). `supersedes:` must be present (may be empty). Ids are assigned by the CLI, never by the drafter.
-- **Finite taxonomy.** `area:` and `topic:` are validated against `<ledger>/.taxonomy/*.yaml`. New values require explicit add — friction is the feature.
-- **Project-scoped browsing.** Every decision has a `project:` wikilink. Embed `![[Current Decisions.base#Log]]` on a project page for a live decision log scoped to that project.
-- **Reference convention.** External code and vault notes use `ndr:<grain>` to point at atoms — atom-id (`ndr:0011` / `ndr:k3m9xq`, frozen historical anchor), slug (`ndr:#monorepo-shape`, follows supersession via the atom's `aliases:` field), or topic (`ndr:architecture/repo-shape`, area-grain). All three resolve via `ndr resolve`. See `references/workflow.md#reference-convention`.
+- **Atomic decisions.** One chosen path, one set of consequences. Bundled
+  decisions get split.
+- **Supersession-aware reading.** When a decision is revised, the old artifact
+  stays, gets `status: superseded` + a `superseded_by:` pointer; the successor
+  carries `supersedes:`. Resolution always lands on the head — `ndr resolve`
+  walks the chain and surfaces drift.
+- **Hybrid-altitude body.** Each section: heading + one-sentence gist +
+  (optional) default-collapsed callout.
+- **Required frontmatter.** `ndr capture` refuses to write if any required field
+  is missing (`title`, `status`, `decision_date`, `project`, `area`, `topic`,
+  `reversibility`). `supersedes:` must be present (may be empty). Ids are assigned
+  by the CLI, never by the drafter.
+- **Finite taxonomy.** `area:` and `topic:` are validated against
+  `<ledger>/.taxonomy/*.yaml`. New values require an explicit add — friction is
+  the feature.
+- **Project-scoped browsing.** Every decision has a `project:` wikilink. Embed
+  `![[Current Decisions.base#Log]]` on a project page for a live decision log
+  scoped to that project.
+- **Reference convention.** External code and vault notes use `ndr:<grain>` to
+  point at atoms — atom-id (`ndr:0011` / `ndr:k3m9xq`, a frozen historical
+  anchor), slug (`ndr:#monorepo-shape`, follows supersession via the atom's
+  `aliases:` field), or topic (`ndr:architecture/repo-shape`, area-grain). All
+  three resolve via `ndr resolve`. See `references/workflow.md#reference-convention`.
 
-See `references/frontmatter-schema.md`, `references/taxonomy.md`, `references/workflow.md` for full spec.
+See `references/frontmatter-schema.md`, `references/taxonomy.md`, and
+`references/workflow.md` for the full spec.
 
-## History
+## Notes
 
-Originally scaffolded as a standalone repo at `~/Projects/nested-decision-records/`, then hosted in `cc-marketplace` for cross-machine sync. Migrated here (JUN-175) once the `ndr` CLI became the substrate for every skill — co-locating plugin and CLI makes their co-evolution atomic. The cc-marketplace copy is deprecated. The seed atoms in `assets/decisions/` are ndr's own decision history — the A–H meta-chain (0001-0008) plus the reference-addressability resolution (0049-0051). Installing them gives you a working corpus from day one.
+- The seed atoms in `assets/decisions/` are ndr's own decision history — the A–H
+  meta-chain (0001-0008) plus the reference-addressability resolution
+  (0049-0051). Installing them gives you a working corpus from day one.
+- The plugin and CLI are co-located on purpose: every skill is built on the CLI,
+  so keeping them in one repo makes their co-evolution atomic. (An earlier
+  standalone copy hosted in `cc-marketplace` is deprecated.)
+
+## Decisions behind this design
+
+Resolve any of these with `ndr resolve <id>`:
+
+- `ndr:0129` — skills route every NDR operation through the CLI.
+- `ndr:0144` — atom ids are locally generated 6-char base32; legacy 4-digit ids
+  are frozen.
