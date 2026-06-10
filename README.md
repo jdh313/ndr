@@ -137,12 +137,13 @@ served from this repo's own marketplace. The skills are thin orchestration over
 this CLI.
 
 ```
-/plugin marketplace add ~/Projects/ndr
+/plugin marketplace add jdh313/ndr
 /plugin install ndr@ndr
 ```
 
-The plugin requires the `ndr` binary on PATH (`bun run install:bin`) — the
-skills hard-error without it. See [plugins/ndr/README.md](./plugins/ndr/README.md).
+The plugin requires the `ndr` binary on PATH — build it from a clone with
+`bun run install:bin` (the skills hard-error without it). See
+[plugins/ndr/README.md](./plugins/ndr/README.md).
 
 ## Contributing
 

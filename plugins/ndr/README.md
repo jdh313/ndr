@@ -24,10 +24,11 @@ and the shared ledger/config model, see the [repo-root README](../../README.md).
 ## Install
 
 The plugin requires the `ndr` binary on PATH — skills hard-error without it.
-Build it from the repo root (`bun run install:bin`), then:
+Clone the repo and build it (`bun run install:bin`), then add the marketplace
+from GitHub:
 
 ```
-/plugin marketplace add ~/Projects/ndr
+/plugin marketplace add jdh313/ndr
 /plugin install ndr@ndr
 /ndr-bootstrap
 ```
