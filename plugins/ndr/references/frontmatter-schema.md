@@ -7,7 +7,7 @@ Canonical YAML spec for decision atoms. Required fields are starred. The capture
 ```yaml
 ---
 # Identity
-id: "0042"                            # *zero-padded sequence; auto-assigned. Quoted to preserve leading zeros.
+id: "0042"                            # *auto-assigned by `ndr capture`; OMIT from drafts. Shown here as the on-disk form. Quoted to preserve leading zeros.
 title: "Use FastAPI for the auth service"  # *short imperative phrase
 status: current                       # *enum: current | superseded | retracted
 decision_date: 2026-05-14             # *ISO date
@@ -47,7 +47,7 @@ tags:
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `id` | string (4-digit zero-padded, quoted) | yes | Auto-assigned. Quote it so `"0042"` doesn't get coerced to int `42` |
+| `id` | string (4-digit zero-padded legacy, or 6-char base32) | yes (on disk) | Auto-assigned by `ndr capture`. **Omit from drafts** — a draft that emits an `id` (even a placeholder string) fails validation; the CLI mints when the field is absent. Quote it so `"0042"` doesn't get coerced to int `42` |
 | `title` | string | yes | Short imperative phrase |
 | `status` | enum | yes | `current`, `superseded`, `retracted` |
 | `decision_date` | ISO date | yes | When the decision was made, not when the atom was written |
@@ -96,6 +96,8 @@ Assumptions live in the **body**, not frontmatter. See `## Assumptions` body con
 ## Body convention — hybrid altitude
 
 Each section has a **heading + one-line gist** (always visible) plus an optional **collapsible callout** for deeper texture. The reader scanning the atom sees only headings + gist lines. Drilling deeper is one click per altitude.
+
+The example below shows the **on-disk** form (id already stamped into the H1). A **draft** emits the H1 as `# PLACEHOLDER — <title>`; `ndr capture` patches the `# PLACEHOLDER —` sentinel into `# <minted-id> — <title>` on persist.
 
 ```markdown
 # 0042 — Use FastAPI for the auth service
