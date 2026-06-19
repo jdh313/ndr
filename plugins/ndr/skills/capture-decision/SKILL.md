@@ -179,7 +179,15 @@ Do not call `ndr capture` until the reviewer passes (or the user explicitly over
 
 ### Step 7 — Persist
 
-`ndr capture` is **single-atom**: loop over the accepted drafts and pipe each one to the CLI as JSON on stdin. Use a quoted heredoc — it avoids shell-quoting hazards (JSON quotes, newlines, `$`, backticks pass through verbatim) and keeps each persist call to a single Bash invocation. Strip the drafter's `missing_fields` key; the draft payload is `{frontmatter, body}`:
+`ndr capture` is **single-atom**: loop over the accepted drafts and pipe each one to the CLI as JSON on stdin. Use a quoted heredoc — it avoids shell-quoting hazards (JSON quotes, newlines, `$`, backticks pass through verbatim) and keeps each persist call to a single Bash invocation. The draft payload is `{frontmatter, body}`.
+
+**Normalize the payload before piping** (defense-in-depth — a stray field from any caller, not just `ndr-drafter`, must not fail the write):
+
+- **Strip `missing_fields`** — drafter scratch, not part of the payload.
+- **Strip `frontmatter.id` if present** — the CLI mints the id only when the field is absent; a leftover placeholder string (e.g. `"TBD — assigned by ndr capture"`) is validated and rejected. Delete the key so the mint path runs.
+- **Normalize the body H1 to `# PLACEHOLDER — <title>`** — the CLI patches the `# PLACEHOLDER —` sentinel into `# <id> — <title>`. If a draft arrived with the title already inline (`# <title>` or `# <id> — <title>`), the sentinel is absent and the heading never gets the id. Rewrite the first H1 line to `# PLACEHOLDER — <title>` before piping.
+
+Then pipe the cleaned `{frontmatter, body}`:
 
 ```bash
 ndr capture <<'NDR_DRAFT_EOF'

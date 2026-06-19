@@ -1,5 +1,6 @@
 ---
-id: "NNNN"
+# No `id:` field. `ndr capture` mints the atom-id on persist; a draft that emits
+# an `id` (even a placeholder string) is rejected at validation. Omit it.
 title: "Short imperative phrase"
 status: current             # current | superseded | retracted
 decision_date: YYYY-MM-DD
@@ -22,7 +23,11 @@ tags:
   - decision
 ---
 
-# NNNN — Short imperative phrase
+# PLACEHOLDER — Short imperative phrase
+
+<!-- The H1 stays literally `# PLACEHOLDER — <title>`. `ndr capture` patches the
+     `# PLACEHOLDER —` sentinel into `# <minted-id> — <title>` on persist. Do not
+     inline the title or an id into the heading yourself. -->
 
 ## Decision
 

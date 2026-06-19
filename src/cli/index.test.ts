@@ -411,6 +411,35 @@ describe("ndr capture", () => {
     }
   });
 
+  // Defect 1 (ndr capture pipeline bug): the drafter must OMIT `id`. A draft that
+  // emits a placeholder string for `id` is kept (not stripped) and rejected by the
+  // schema — this is why the drafter contract and the orchestrator's Step 7 strip it.
+  test("a draft carrying a placeholder `id` string is rejected with a validation error", async () => {
+    const result = await captureCommand(
+      draftJson({ id: "TBD — assigned by ndr capture" }),
+      tmp,
+    );
+    expect(result.exitCode).toBe(1);
+    expect(JSON.parse(result.stderr).error.kind).toBe("validation");
+  });
+
+  // Defect 2 (ndr capture pipeline bug): the body H1 must be the `# PLACEHOLDER —`
+  // sentinel, not the title inline. The canonical drafter contract — no `id`, a
+  // PLACEHOLDER heading — must round-trip to exit 0 with the heading patched to the
+  // minted id.
+  test("the canonical drafter contract (no id, PLACEHOLDER heading) round-trips and patches the H1", async () => {
+    const result = await captureCommand(draftJson(), tmp);
+    expect(result.exitCode).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+
+    const written = await fs.readFile(path.join(tmp, parsed.path), "utf8");
+    // The sentinel is gone; the minted id now prefixes the title in the H1.
+    expect(written).not.toContain("# PLACEHOLDER —");
+    expect(written).toContain(`# ${parsed.id} — Use FastAPI`);
+    // And no leftover `id:` placeholder leaked into the frontmatter.
+    expect(written).toContain(`id: "${parsed.id}"`);
+  });
+
   test("a minimal draft omitting status/supersedes/tags captures with capture-intent defaults", async () => {
     const minimal = JSON.stringify({
       frontmatter: {
