@@ -15,10 +15,11 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
+      # Config-file mode (release-please-config.json + .release-please-manifest.json)
+      # rather than a bare release-type input, so initial-version is respected —
+      # the release-type input path always hardcodes 1.0.0 for a first release.
       - uses: googleapis/release-please-action@v5
         id: release
-        with:
-          release-type: node
 
   # Native-runner matrix, not cross-compiled from one host (bun-build-targets-stable
   # assumption, ndr:0128): bun build --compile has open bugs cross-compiling to
