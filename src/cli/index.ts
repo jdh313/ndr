@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { Command } from "commander";
 
+import pkg from "../../package.json" with { type: "json" };
 import {
   AtomNotFoundError,
   DraftValidationError,
@@ -34,7 +35,7 @@ import { CHECK_CLASSES, asAtomId, diagnose } from "../domain/index.ts";
 // lockstep with ATOM_ID_PATTERN in domain/atom.ts.
 const ATOM_ID_REF = /^(?:\d{4}|[0-9a-z]{6})$/;
 
-const NDR_VERSION = "0.0.0";
+const NDR_VERSION = pkg.version;
 
 export { NO_LEDGER_MESSAGE } from "./config.ts";
 
