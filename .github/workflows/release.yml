@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v5
+        id: release
+        with:
+          release-type: node
+
+  # Native-runner matrix, not cross-compiled from one host (bun-build-targets-stable
+  # assumption, ndr:0128): bun build --compile has open bugs cross-compiling to
+  # macOS (codesign truncation) and cross-libc targets, so each OS/arch builds on
+  # its own runner instead.
+  build:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset_name: ndr-linux-x64
+          - os: ubuntu-24.04-arm
+            asset_name: ndr-linux-arm64
+          - os: macos-13
+            asset_name: ndr-darwin-x64
+          - os: macos-latest
+            asset_name: ndr-darwin-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-${{ runner.arch }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-bun-
+
+      - run: bun install --frozen-lockfile
+
+      - name: Build binary
+        env:
+          # macOS codesign truncation workaround (oven-sh/bun#29120): skip Bun's
+          # own embedded signature, then ad-hoc sign explicitly below.
+          BUN_NO_CODESIGN_MACHO_BINARY: 1
+        run: bun run build
+
+      - name: Ad-hoc codesign
+        if: runner.os == 'macOS'
+        run: codesign --force --deep --sign - dist/ndr
+
+      - name: Rename binary
+        run: mv dist/ndr dist/${{ matrix.asset_name }}
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.release-please.outputs.tag_name }}
+          files: dist/${{ matrix.asset_name }}
