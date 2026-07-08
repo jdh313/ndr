@@ -415,10 +415,7 @@ describe("ndr capture", () => {
   // emits a placeholder string for `id` is kept (not stripped) and rejected by the
   // schema — this is why the drafter contract and the orchestrator's Step 7 strip it.
   test("a draft carrying a placeholder `id` string is rejected with a validation error", async () => {
-    const result = await captureCommand(
-      draftJson({ id: "TBD — assigned by ndr capture" }),
-      tmp,
-    );
+    const result = await captureCommand(draftJson({ id: "TBD — assigned by ndr capture" }), tmp);
     expect(result.exitCode).toBe(1);
     expect(JSON.parse(result.stderr).error.kind).toBe("validation");
   });
