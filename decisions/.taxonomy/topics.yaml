@@ -4,6 +4,7 @@
 # Seeded from the vault taxonomy with the values the migrated NDR-system
 # atoms use (JUN-176).
 - ci-strategy          # CI platform, gates, caching, trigger conventions
+- commit-convention    # how commit messages are authored/enforced
 - data-modelling       # schema, dimensions, facts, grain
 - deployment           # how things ship / run / migrate
 - discipline           # what humans must do without tool support
