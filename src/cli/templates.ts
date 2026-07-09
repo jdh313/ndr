@@ -75,5 +75,5 @@ When a decision lands in conversation — a choice between alternatives
 with a stated rationale — invoke \`/capture-decision\` at end of chat to
 record it. The capture skill scans the conversation, drafts atomic
 candidates, asks for confirmation, and writes the file with valid
-frontmatter and a hybrid-altitude body.
+frontmatter and a new-format body (single altitude, plain markdown).
 `;
