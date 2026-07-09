@@ -221,10 +221,7 @@ export async function run(argv: readonly string[]): Promise<number> {
       "Initialize the current repo for ndr: .ndr.toml, ledger, taxonomy, .claude/rules/ndr.md.",
     )
     .option("--ledger <path>", "Ledger directory to pin in .ndr.toml.", "./decisions")
-    .option(
-      "--project <name>",
-      "Project name for the .ndr.toml wikilink (default: directory name).",
-    )
+    .option("--project <name>", "Project name for .ndr.toml (default: directory name).")
     .option(
       "--force",
       "Overwrite an existing .ndr.toml (taxonomy files are never overwritten).",

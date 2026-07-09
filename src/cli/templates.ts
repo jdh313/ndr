@@ -36,8 +36,8 @@ description: NDR coverage — ground coding work in the decision ledger before s
 
 This repository is tracked by the \`ndr\` plugin. Engineering decisions
 that govern this codebase live as atomic markdown files in the decision
-ledger pinned by this repo's \`.ndr.toml\`, with a
-\`project: [[<this-repo>]]\` frontmatter link.
+ledger pinned by this repo's \`.ndr.toml\`, with a plain
+\`project:\` frontmatter value naming this repo.
 
 ### When the orchestrator should ground itself
 
