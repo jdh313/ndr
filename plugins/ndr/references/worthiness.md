@@ -71,7 +71,7 @@ Routing complement: the CLAUDE.md skip-condition list (`05-vault-session-start.m
 ### Clean pass via supersession — `ndr:0102` (Markdown remains canonical; swamp migration paused)
 
 - **Named alternative?** Yes — three rejected paths (execute as planned, pause-atom without superseding, drop-and-revert).
-- **Future-revisitable?** Yes — load-bearing `## Revisit if` conditions (`obsidian-cli-plus-mcp-sufficient`, `no-concrete-pain-yet`) with explicit "revisit if" conditions.
+- **Future-revisitable?** Yes — load-bearing `## Revisit if` bullets (`obsidian-cli-plus-mcp-sufficient`, `no-concrete-pain-yet`), each an explicit flip condition.
 - **Rationale outlives the code site?** Yes — this is a substrate decision; rationale ("99 atoms with no friction", "Logseq DB-migration cautionary tale") is durational.
 
 Why this atom is the canonical example of supersession-driven worthiness: 0102 doesn't add a feature, it flips the head because assumptions behind 0070 weakened. The whole reason supersession exists is to record that flip without rewriting history. If the rule was "only capture forward progress," 0102 would be skipped — and the chain head would lie about how the system actually operates.
