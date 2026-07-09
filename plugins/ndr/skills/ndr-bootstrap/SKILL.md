@@ -1,6 +1,6 @@
 ---
 name: ndr-bootstrap
-description: One-time install of ndr's vault content. Copies the seed decision atoms (A–H meta-chain at 0001-0008 plus reference-addressability resolution at 0049-0051), the "Current Decisions" Obsidian Base, and the initial taxonomy YAML files into `~/Loose Ends/`. Idempotent — re-runs skip targets that already exist. Invoke explicitly with `/ndr-bootstrap` once per machine after installing the ndr plugin.
+description: One-time install of ndr's vault content. Copies the seed decision atoms (A–H meta-chain at 0001-0008 plus reference-addressability resolution at 0049-0051) and the initial `labels.yaml` taxonomy file into `~/Loose Ends/`. Idempotent — re-runs skip targets that already exist. Invoke explicitly with `/ndr-bootstrap` once per machine after installing the ndr plugin.
 disable-model-invocation: true
 allowed-tools:
   - Bash
@@ -10,12 +10,11 @@ allowed-tools:
 
 ## Overview
 
-Install ndr's vault-resident content on a fresh machine. Four things land:
+Install ndr's vault-resident content on a fresh machine. Three things land:
 
 1. **Seed decision atoms** (`assets/decisions/*.md` — 0001-0008 A-H meta-chain plus 0049-0051 reference-addressability resolution) → `~/Loose Ends/Decisions/`
-2. **Current Decisions Base** (`assets/bases/current-decisions.base`) → `~/Loose Ends/Bases/Current Decisions.base`
-3. **Taxonomy YAML** (`assets/taxonomy/areas.yaml`, `topics.yaml`) → `~/Loose Ends/Decisions/.taxonomy/`
-4. **Project grounding-rule template** (`assets/project-snippet/project-claude-md.md`) → `~/Loose Ends/Decisions/.templates/project-claude-md.md` — a manual-merge fallback. The normal opt-in is `ndr init`, which writes `.claude/rules/ndr.md` directly; this template is for hand-merging into an existing `CLAUDE.md`.
+2. **Taxonomy YAML** (`assets/taxonomy/labels.yaml`) → `~/Loose Ends/Decisions/.taxonomy/`
+3. **Project grounding-rule template** (`assets/project-snippet/project-claude-md.md`) → `~/Loose Ends/Decisions/.templates/project-claude-md.md` — a manual-merge fallback. The normal opt-in is `ndr init`, which writes `.claude/rules/ndr.md` directly; this template is for hand-merging into an existing `CLAUDE.md`.
 
 Each file is copied **only if the target is absent**. Re-runs do nothing destructive — they print `skipped (exists): <path>` for any target already present.
 
@@ -40,7 +39,6 @@ set -e
 
 PLUGIN_ASSETS="${CLAUDE_PLUGIN_ROOT}/assets"
 VAULT_DECISIONS="$HOME/Loose Ends/Decisions"
-VAULT_BASES="$HOME/Loose Ends/Bases"
 VAULT_TAXONOMY="$VAULT_DECISIONS/.taxonomy"
 VAULT_TEMPLATES="$VAULT_DECISIONS/.templates"
 
@@ -48,7 +46,7 @@ copied=0
 skipped=0
 
 # ensure directories
-mkdir -p "$VAULT_DECISIONS" "$VAULT_BASES" "$VAULT_TAXONOMY" "$VAULT_TEMPLATES"
+mkdir -p "$VAULT_DECISIONS" "$VAULT_TAXONOMY" "$VAULT_TEMPLATES"
 
 # seed decisions
 for src in "$PLUGIN_ASSETS"/decisions/*.md; do
@@ -64,30 +62,17 @@ for src in "$PLUGIN_ASSETS"/decisions/*.md; do
   fi
 done
 
-# base
-base_dst="$VAULT_BASES/Current Decisions.base"
-if [ -e "$base_dst" ]; then
-  echo "skipped (exists): Bases/Current Decisions.base"
+# taxonomy
+labels_src="$PLUGIN_ASSETS/taxonomy/labels.yaml"
+labels_dst="$VAULT_TAXONOMY/labels.yaml"
+if [ -e "$labels_dst" ]; then
+  echo "skipped (exists): Decisions/.taxonomy/labels.yaml"
   skipped=$((skipped+1))
 else
-  cp "$PLUGIN_ASSETS/bases/current-decisions.base" "$base_dst"
-  echo "copied: Bases/Current Decisions.base"
+  cp "$labels_src" "$labels_dst"
+  echo "copied: Decisions/.taxonomy/labels.yaml"
   copied=$((copied+1))
 fi
-
-# taxonomy
-for yaml in areas.yaml topics.yaml; do
-  src="$PLUGIN_ASSETS/taxonomy/$yaml"
-  dst="$VAULT_TAXONOMY/$yaml"
-  if [ -e "$dst" ]; then
-    echo "skipped (exists): Decisions/.taxonomy/$yaml"
-    skipped=$((skipped+1))
-  else
-    cp "$src" "$dst"
-    echo "copied: Decisions/.taxonomy/$yaml"
-    copied=$((copied+1))
-  fi
-done
 
 # project-CLAUDE.md template (for opting individual repos into the grounding rule)
 snippet_dst="$VAULT_TEMPLATES/project-claude-md.md"
@@ -106,7 +91,7 @@ echo ""
 echo "to opt a repo into NDR coverage: run \`ndr init\` at the repo root"
 ```
 
-After the script finishes, report the counts to the user and (if anything was copied) suggest opening `~/Loose Ends/Bases/Current Decisions.base` in Obsidian to verify the rollup renders.
+After the script finishes, report the counts to the user.
 
 ## Output examples
 
@@ -121,12 +106,13 @@ copied: Decisions/0005-mvp-substrate-graphiti.md
 copied: Decisions/0006-readside-decisions-skill.md
 copied: Decisions/0007-mvp-substrate-markdown.md
 copied: Decisions/0008-decisions-atomic.md
-copied: Bases/Current Decisions.base
-copied: Decisions/.taxonomy/areas.yaml
-copied: Decisions/.taxonomy/topics.yaml
+copied: Decisions/0049-ndr-reference-scheme-three-grains.md
+copied: Decisions/0050-slugs-as-aliases-minted-lazily.md
+copied: Decisions/0051-supersession-with-slug-is-three-writes.md
+copied: Decisions/.taxonomy/labels.yaml
 copied: Decisions/.templates/project-claude-md.md
 
-bootstrap complete: 12 copied, 0 skipped (already present)
+bootstrap complete: 13 copied, 0 skipped (already present)
 
 to opt a repo into NDR coverage: run `ndr init` at the repo root
 ```
@@ -137,11 +123,11 @@ to opt a repo into NDR coverage: run `ndr init` at the repo root
 skipped (exists): Decisions/0001-substrate-team-product-cms.md
 ... (etc.)
 
-bootstrap complete: 0 copied, 12 skipped (already present)
+bootstrap complete: 0 copied, 13 skipped (already present)
 ```
 
 ## Notes
 
 - The taxonomy lives in `~/Loose Ends/Decisions/.taxonomy/` (vault-resident, hidden from Obsidian's file browser by the dot prefix). The capture skill writes new values there; cross-machine sync rides on the user's existing vault sync.
-- Seed atoms encode ndr's own decision history (the A–H meta-chain). They're useful as a working corpus from day one and as examples of the hybrid altitude body shape. Delete them if you'd rather start empty.
+- Seed atoms encode ndr's own decision history (the A–H meta-chain). They're useful as a working corpus from day one and as examples of the new atom body shape. Delete them if you'd rather start empty.
 - This skill does NOT modify the dotfiles repo, `~/.claude/`, or anything outside `~/Loose Ends/`. The plugin install handles those.
