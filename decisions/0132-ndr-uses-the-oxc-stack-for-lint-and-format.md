@@ -24,33 +24,27 @@ informed_by:
 
 Bet on the Oxc ecosystem for code quality: Oxlint (`oxlint@1.68`) for linting and Oxfmt (`oxfmt@0.53`) for formatting — both standalone npm dev-deps, both replaced together if the ecosystem bet is ever unwound.
 
+## Commitments
+
+- CI and pre-commit hooks run `oxlint` and `oxfmt --check src/` (scoped to src/ so the byte-exact markdown ledger fixtures under test/fixtures/ are not reformatted, JUN-180, 2026-06-04); no eslint or prettier invocation.
+- `.oxlintrc.json` (typescript + import plugin categories, default rules) is the sole lint config artifact; Oxfmt runs config-less, so code style is whatever Oxfmt produces with no `.prettierrc` to maintain.
+- A future ecosystem swap moves both tools together and touches only CI config, the two dev-deps, and `.oxlintrc.json` — isolated to the tooling layer, no domain or adapter changes.
+
+## Revisit if
+
+- A required lint rule (accessibility, framework-specific, or custom org rule) has no Oxlint equivalent — at which point the whole ecosystem layer moves, not just the linter.
+
+## Context
+
+- ndr:0128 commits to Bun as the runtime.
+- The Oxc project (oxc-project/oxc) is Rust-based, sub-second on small repos, and built with the same "JS tooling rebuilt in Rust" philosophy that underlies Bun.
+- The JUN-170 scaffold ticket originally suggested ESLint + Prettier.
+
 ## Why
 
-Oxc is the Rust-based, Bun-aligned ecosystem for JS/TS tooling; picking it as a unit keeps the code-quality layer coherent and swappable.
-
-ndr:0128 commits to Bun as the runtime. The Oxc project (oxc-project/oxc) is the natural counterpart: Rust-based, sub-second on small repos, and developed with the same "JS tooling rebuilt in Rust" philosophy that underlies Bun. Choosing Oxlint and Oxfmt together is not two independent tool picks — it is a single ecosystem bet. If a future reason to leave Oxc materializes (e.g., a load-bearing ESLint-only plugin, or Biome pulling ahead on TypeScript coverage), both tools move together to whatever replaces them. Mixing — say, Oxlint + Prettier — would break the coherence of the bet and produce a hybrid that belongs to neither ecosystem. The concrete tools: `.oxlintrc.json` at repo root with typescript and import plugins, default rules; Oxfmt runs config-less.
+Picking Oxc as a unit keeps the code-quality layer coherent and swappable. Choosing Oxlint and Oxfmt together is one ecosystem bet, not two independent tool picks: if a reason to leave Oxc ever materializes (a load-bearing ESLint-only plugin, or Biome pulling ahead on TypeScript coverage), both tools move together to whatever replaces them. Mixing — say, Oxlint + Prettier — would break the coherence of the bet and produce a hybrid that belongs to neither ecosystem.
 
 ## Alternatives
 
-ESLint + Prettier (JS-native toolchain) — deferred; Biome (rival Rust monolith) — considered and passed over.
-
-- **ESLint + Prettier:** The JUN-170 ticket's original suggestion and the broadest-ecosystem choice. ESLint's plugin surface is its selling point; at ndr's current scale that breadth is overhead, not leverage. Startup cost is felt on every save; no plugin gap exists today that would tip the balance.
-- **Biome:** Also Rust-based and also a single-ecosystem bet — the closest rival framing. Oxc's TypeScript-specific lint rule set was more complete at the time of scaffolding, and Oxfmt's output is closer to Prettier's style, which lowers the friction of adoption. Biome is the natural revisit target if Oxc rule coverage stalls.
-
-## Assumptions
-
-`no-esonly-plugin-needed`
-
-No load-bearing lint rule requires a plugin that exists only in the ESLint ecosystem.
-
-- **Current state:** active — default typescript+import rules cover current codebase
-- **Revisit if:** a required rule (accessibility, framework-specific, or custom org rule) has no Oxlint equivalent, at which point the whole ecosystem layer moves, not just the linter
-
-## Consequences
-
-Sub-second lint and format on every save · Rust-based toolchain coherent with Bun runtime · ESLint and Prettier absent from the dependency graph · two config artifacts: `.oxlintrc.json` (lint) and none (Oxfmt is config-less).
-
-- CI and pre-commit hooks run `oxlint` and `oxfmt --check src/` (scoped to src/ so the byte-exact markdown ledger fixtures under test/fixtures/ are not reformatted, JUN-180, 2026-06-04); no eslint or prettier invocation.
-- `.oxlintrc.json` enables `typescript` and `import` plugin categories with default rules; it is the sole lint config artifact.
-- Oxfmt is intentionally config-less — code style is whatever Oxfmt produces, with no `.prettierrc` to maintain or argue over.
-- Future ecosystem swap (to Biome or back to ESLint+Prettier) touches CI config, the two dev-deps, and `.oxlintrc.json` — isolated to the tooling layer, no domain or adapter changes required.
+- **ESLint + Prettier** — deferred: the JUN-170 ticket's original suggestion and the broadest-ecosystem choice, but ESLint's plugin breadth is overhead rather than leverage at ndr's scale, the startup cost is felt on every save, and no plugin gap exists today that would tip the balance.
+- **Biome** — passed over: also Rust-based and also a single-ecosystem bet (the closest rival framing), but Oxc's TypeScript lint rule set was more complete at scaffolding time and Oxfmt's output is closer to Prettier's style; Biome is the natural revisit target if Oxc rule coverage stalls.

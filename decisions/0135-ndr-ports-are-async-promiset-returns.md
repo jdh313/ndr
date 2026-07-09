@@ -18,24 +18,27 @@ informed_by:
   - "0129"
 ---
 
+# 0135 — ndr ports are async (Promise<T> returns)
+
 ## Decision
 
 `ReadPort` and `WritePort` methods return `Promise<T>`, even though the first adapter (markdown filesystem) could be implemented synchronously.
 
+## Commitments
+
+- Every `ReadPort` / `WritePort` call site is `await`-ed.
+- Test bodies that exercise ports are `async`.
+
+## Context
+
+- The markdown adapter reads/writes files; `node:fs/promises` is already async, so the current adapter doesn't drive the choice either way.
+- Future adapters under consideration: sqlite (fast, but its node bindings are async-by-convention), an MCP-backed adapter (network-bound, inherently async), and a hypothetical remote-ledger HTTP adapter (async).
+
 ## Why
 
-Future adapters (sqlite, MCP, HTTP) won't be sync-fast — locking the interface to sync now would force a breaking change later.
-
-The markdown adapter reads/writes files; `node:fs/promises` is already async, so the current adapter doesn't drive the choice. The decision is about not painting future adapters into a corner. sqlite is fast but its node bindings are async-by-convention. An MCP-backed adapter is network-bound and inherently async. A hypothetical remote-ledger HTTP adapter is async. Picking sync now means every call site refactors when the second adapter ships; picking async now means callers always `await` and the cost is one tick per call.
+Future adapters (sqlite, MCP, HTTP) won't be sync-fast — locking the interface to sync now would force a breaking change later. The decision is about not painting future adapters into a corner, not about the current adapter's needs. Picking sync now means every call site refactors when the second adapter ships; picking async now means callers always `await` and the cost is one tick per call.
 
 ## Alternatives
 
-Sync interfaces (rejected) · Dual sync+async surface (rejected)
-
-**Sync interfaces:** Force a breaking change at the second adapter, which lands inside the same project window (JUN-172 ships `ndr resolve` against the markdown adapter; later adapters won't be sync).
-
-**Dual sync+async:** Forks the type contract for no real benefit — every adapter would have to implement both surfaces, or callers would have to choose which surface they consume.
-
-## Consequences
-
-Every `ReadPort` / `WritePort` call site is `await`ed · Test bodies are `async` · No measurable cost in the CLI path
+- **Sync interfaces** — rejected: forces a breaking change at the second adapter, which lands inside the same project window (JUN-172 ships `ndr resolve` against the markdown adapter; later adapters won't be sync).
+- **Dual sync+async surface** — rejected: forks the type contract for no real benefit — every adapter would have to implement both surfaces, or callers would have to choose which surface they consume.
