@@ -13,8 +13,8 @@ files automatically.
 
 This repository is tracked by the `ndr` plugin. Engineering decisions
 that govern this codebase live as atomic markdown files in the decision
-ledger pinned by this repo's `.ndr.toml`, with a
-`project: [[<this-repo>]]` frontmatter link.
+ledger pinned by this repo's `.ndr.toml`, with a plain
+`project:` frontmatter value naming this repo.
 
 ### When the orchestrator should ground itself
 
@@ -37,17 +37,14 @@ canonical.
 ### Pointing at decisions from code
 
 Use `ndr:` references in code comments, commit messages, and PR
-descriptions. Three resolvable grains:
+descriptions. Two resolvable grains:
 
 - `ndr:0042` — frozen atom-id; "this code exists because of decision
-  0042" (historical anchor).
-- `ndr:#auth-substrate` — slug; follows supersession to the live atom.
-  Use when you mean "whatever decision currently governs auth substrate".
-- `ndr:auth/substrate` — `area/topic` pair; resolves to all current
-  atoms in that taxonomy slot. Use when the whole area governs the call
-  site.
+  0042" (historical anchor). Resolve walks to the current head.
+- `ndr:<label>` — taxonomy label; resolves to all current atoms
+  carrying that label. Use when the whole area governs the call site.
 
-The `/decisions` skill (and `@ndr-reader` agent) resolve all three.
+The `/decisions` skill (and `@ndr-reader` agent) resolve all grains.
 
 ### Capturing new decisions
 
@@ -55,4 +52,4 @@ When a decision lands in conversation — a choice between alternatives
 with a stated rationale — invoke `/capture-decision` at end of chat to
 record it. The capture skill scans the conversation, drafts atomic
 candidates, asks for confirmation, and writes the file with valid
-frontmatter and a hybrid-altitude body.
+frontmatter and a new atom body shape.

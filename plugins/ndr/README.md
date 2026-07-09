@@ -19,7 +19,7 @@ and the shared ledger/config model, see the [repo-root README](../../README.md).
 | `/decisions <topic>` | Manual, when the user has a topic or `ndr:` ref in hand | Structured refs resolve with one `ndr resolve` call (drift surfaced automatically); free-text dispatches `@ndr-reader` for search + synthesis |
 | `/ground [scope]` | Before substantive code work, or before delegating to a coding subagent (junior-dev / senior-dev / tech-lead) | Infers scope from CWD / `.ndr.toml` / file path / user phrase, queries the CLI (or `@ndr-reader` for fuzzy scopes), returns a brief plus `ndr:` reference strings the delegating prompt can paste in |
 | `/drift-check [scope]` | Manual, or offered by `spec-flow:close` before archiving | Walks current heads, compares each against a chosen diff scope (working tree / branch range / commit range / full repo), surfaces divergences with three resolutions per item — amend, supersede, revert |
-| `/ndr-bootstrap` | Once per machine after plugin install | Copies the seed decision atoms, the Obsidian Base, and the initial taxonomy YAML into the author's Obsidian vault at `~/Loose Ends/` (currently hardcoded). Idempotent |
+| `/ndr-bootstrap` | Once per machine after plugin install | Copies the seed decision atoms and the initial taxonomy YAML into the author's Obsidian vault at `~/Loose Ends/` (currently hardcoded). Idempotent |
 
 ## Install
 
@@ -39,13 +39,11 @@ After install:
   for the resolution order); `ndr status` reports which source won.
 - New atoms get 6-char base32 ids assigned by `ndr capture`; legacy 4-digit ids
   are frozen.
-- Each atom uses a **hybrid-altitude body**: a heading + one-line gist for every
-  section, with deeper texture in default-collapsed `[!info]-` / `[!warning]-`
-  callouts — the right detail at the right time.
-- The Obsidian Base at `~/Loose Ends/Bases/Current Decisions.base` gives a
-  faceted rollup (cards, tables, by area, superseded chain).
-- Taxonomy (`area:`, `topic:`) lives at `<ledger>/.taxonomy/{areas,topics}.yaml`.
-  `ndr capture` validates against these lists.
+- Each atom uses a **single-altitude body**: fixed sections (Decision, Scope,
+  Commitments, Revisit if, Context, Why, Alternatives) in plain markdown, each
+  written once at the length it deserves — no callouts.
+- Taxonomy (`labels:`) lives at `<ledger>/.taxonomy/labels.yaml`.
+  `ndr capture` validates against this list.
 
 ## Per-repo config
 
@@ -83,11 +81,8 @@ plugins/ndr/
 │   └── decision-single.md
 └── assets/                    # vault content the bootstrap skill installs
     ├── decisions/             # seed atoms — A–H meta-chain (0001-0008) plus reference-addressability resolution (0049-0051)
-    ├── bases/
-    │   └── current-decisions.base
     └── taxonomy/
-        ├── areas.yaml
-        └── topics.yaml
+        └── labels.yaml
 ```
 
 The CLI itself lives in this repo's `src/` (Commander entry points, domain
@@ -101,23 +96,20 @@ types, markdown ledger adapter) — see the [root README](../../README.md).
   stays, gets `status: superseded` + a `superseded_by:` pointer; the successor
   carries `supersedes:`. Resolution always lands on the head — `ndr resolve`
   walks the chain and surfaces drift.
-- **Hybrid-altitude body.** Each section: heading + one-sentence gist +
-  (optional) default-collapsed callout.
+- **Single-altitude body.** Fixed sections in plain markdown; content written
+  once per section; no callouts.
 - **Required frontmatter.** `ndr capture` refuses to write if any required field
-  is missing (`title`, `status`, `decision_date`, `project`, `area`, `topic`,
-  `reversibility`). `supersedes:` must be present (may be empty). Ids are assigned
+  is missing (`title`, `status`, `decision_date`, `author`, `conviction`,
+  `project`, `labels`; `supersedes:` presence-required). Ids are assigned
   by the CLI, never by the drafter.
-- **Finite taxonomy.** `area:` and `topic:` are validated against
-  `<ledger>/.taxonomy/*.yaml`. New values require an explicit add — friction is
-  the feature.
-- **Project-scoped browsing.** Every decision has a `project:` wikilink. Embed
-  `![[Current Decisions.base#Log]]` on a project page for a live decision log
-  scoped to that project.
-- **Reference convention.** External code and vault notes use `ndr:<grain>` to
-  point at atoms — atom-id (`ndr:0011` / `ndr:k3m9xq`, a frozen historical
-  anchor), slug (`ndr:#monorepo-shape`, follows supersession via the atom's
-  `aliases:` field), or topic (`ndr:architecture/repo-shape`, area-grain). All
-  three resolve via `ndr resolve`. See `references/workflow.md#reference-convention`.
+- **Finite taxonomy.** `labels:` are validated against
+  `<ledger>/.taxonomy/labels.yaml`. New values require an explicit add —
+  friction is the feature.
+- **Project-scoped decisions.** Every decision has a plain-string `project:`
+  field naming the repo it governs.
+- **Reference convention.** Two grains: atom-id (`ndr:0042`, historical anchor;
+  resolve walks to head) and label (`ndr:<label>`, all current heads carrying
+  that label). See `references/workflow.md#reference-convention`.
 
 See `references/frontmatter-schema.md`, `references/taxonomy.md`, and
 `references/workflow.md` for the full spec.
