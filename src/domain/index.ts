@@ -6,13 +6,10 @@ export {
 } from "./schema.ts";
 export {
   asAtomId,
-  asSlug,
-  extractAtomIdFromWikilink,
+  extractAtomIdFromRef,
   generateAtomId,
-  normalizeSlug,
   ATOM_ID_PATTERN,
   type AtomId,
-  type Slug,
   type Reference,
   type Atom,
   type AtomDraft,
