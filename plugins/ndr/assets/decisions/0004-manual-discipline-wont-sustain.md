@@ -1,28 +1,23 @@
 ---
 id: "0004"
-title: "Manual discipline won't sustain; minimum viable test requires capture-skill tooling"
+title: Manual discipline won't sustain; minimum viable test requires
+  capture-skill tooling
 status: current
 decision_date: 2026-05-13
-
-project: "[[Decision Pipeline]]"
-
-derived_from:
-  - "[[Mulling/2026-05-13_decision-capture-pipeline]]"
-informed_by:
-  - "[[Decisions/0003-q1-method-discipline-experiment]]"
+author: Jacob Hoehler
+conviction: tentative
+project: Decision Pipeline
+labels:
+  - process
+  - discipline
+  - meta-chain
+binds: []
 supersedes: []
 superseded_by: []
-
-area: process
-topic: discipline
-impacts: []
-
-revisit_triggers: []
-
-reversibility: easy
-tags:
-  - decision
-  - meta-chain
+derived_from:
+  - Mulling/2026-05-13_decision-capture-pipeline
+informed_by:
+  - "0003"
 ---
 
 # 0004 — Manual discipline won't sustain; minimum viable test requires capture-skill tooling
@@ -31,23 +26,20 @@ tags:
 
 The MVP includes a capture skill (`/capture-decision`). Pure hand-rolled markdown without skill support is not a valid test path.
 
+## Commitments
+
+- `/capture-decision` is in MVP scope.
+- Discipline-without-tooling is no longer a valid path for testing Q1.
+
+## Revisit if
+
+- Running the skill for several weeks shows the friction is still too high (refine UX) or unnecessary (drop tooling, run manual).
+
+## Context
+
+- Writing a structured decision artifact after every chat without skill support has too high an activation energy.
+- High activation energy causes the discipline to lapse before it can produce signal, leaving Q1 unanswered.
+
 ## Why
 
-A capture skill is part of the test apparatus — without it, friction kills the discipline before it can produce signal.
-
-> [!info]- Full reasoning
-> Writing a structured decision artifact after every chat without skill support has too high an activation energy. The discipline lapses, the test fails to produce signal, and Q1 stays unanswered. The skill is part of the test apparatus, not separate from it.
-
-## Assumptions
-
-`tooling-lowers-activation-energy`
-
-> [!warning]- tooling-lowers-activation-energy
-> A capture skill reduces activation energy enough that the discipline sustains across sessions; pure hand-rolled markdown does not.
->
-> - **Current state:** untested at MVP install time; the MVP itself is the test
-> - **Revisit if:** running the skill for several weeks shows the friction is still too high (refine UX) or unnecessary (drop tooling, run manual)
-
-## Consequences
-
-`/capture-decision` is in MVP scope. Discipline-without-tooling is no longer a valid path for testing Q1.
+A capture skill is part of the test apparatus, not separate from it — without it, friction kills the discipline before it can produce signal.
