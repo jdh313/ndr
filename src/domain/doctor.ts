@@ -1,4 +1,4 @@
-import { ATOM_ID_PATTERN, extractAtomIdFromWikilink, normalizeSlug } from "./atom.ts";
+import { ATOM_ID_PATTERN, extractAtomIdFromRef } from "./atom.ts";
 import type { Frontmatter } from "./schema.ts";
 
 // ── Scan input shapes ────────────────────────────────────────────────────────

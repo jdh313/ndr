@@ -1,5 +1,5 @@
 import { expect, test, describe } from "bun:test";
-import { asAtomId, asSlug, generateAtomId } from "./atom.ts";
+import { asAtomId, generateAtomId, extractAtomIdFromRef } from "./atom.ts";
 
 describe("asAtomId", () => {
   test("accepts 4-digit zero-padded string (legacy)", () => {
@@ -39,15 +39,15 @@ describe("generateAtomId", () => {
   });
 });
 
-describe("asSlug", () => {
-  test("accepts kebab-case", () => {
-    expect(asSlug("monorepo-shape") as string).toBe("monorepo-shape");
-    expect(asSlug("substrate") as string).toBe("substrate");
+describe("extractAtomIdFromRef", () => {
+  test("accepts a plain atom id", () => {
+    expect(extractAtomIdFromRef("0072")).toBe("0072");
+    expect(extractAtomIdFromRef("k3m9xq")).toBe("k3m9xq");
   });
-
-  test("rejects non-kebab values", () => {
-    expect(() => asSlug("Monorepo")).toThrow();
-    expect(() => asSlug("mono_repo")).toThrow();
-    expect(() => asSlug("-leading")).toThrow();
+  test("still accepts a legacy wikilink (old corpora)", () => {
+    expect(extractAtomIdFromRef("[[Decisions/0072-taxonomy-as-sibling]]")).toBe("0072");
+  });
+  test("returns null for garbage", () => {
+    expect(extractAtomIdFromRef("not-an-id")).toBeNull();
   });
 });
