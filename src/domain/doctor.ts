@@ -39,8 +39,9 @@ export interface Taxonomy {
 export type CheckClass =
   | "chain_integrity"
   | "status_coherence"
-  | "alias_drift"
   | "taxonomy"
+  | "binds_stale"
+  | "context_section"
   | "missing_fields"
   | "frontmatter_body_drift"
   | "malformed";
@@ -49,8 +50,9 @@ export type CheckClass =
 export const CHECK_CLASSES: readonly CheckClass[] = [
   "chain_integrity",
   "status_coherence",
-  "alias_drift",
   "taxonomy",
+  "binds_stale",
+  "context_section",
   "missing_fields",
   "frontmatter_body_drift",
   "malformed",
@@ -69,7 +71,7 @@ export interface Finding {
 export interface RepairCandidate {
   readonly predecessorPath: string;
   readonly successorPath: string;
-  readonly wikilink: string;
+  readonly successorId: string;
 }
 
 export interface DoctorReport {
@@ -87,10 +89,10 @@ const REQUIRED_FIELDS = [
   "title",
   "status",
   "decision_date",
+  "author",
+  "conviction",
   "project",
-  "area",
-  "topic",
-  "reversibility",
+  "labels",
   "supersedes",
 ] as const;
 
@@ -98,7 +100,11 @@ const REQUIRED_FIELDS = [
 // Pure: cross-atom invariants over an already-loaded scan (ndr:0073 — the
 // schema gates per-record shape; corpus invariants live here). No I/O.
 
-export function diagnose(scan: LedgerScan, taxonomy: Taxonomy | null): DoctorReport {
+export function diagnose(
+  scan: LedgerScan,
+  taxonomy: Taxonomy | null,
+  repoFiles: readonly string[] | null,
+): DoctorReport {
   const findings: Finding[] = [];
   const repairCandidates: RepairCandidate[] = [];
 
@@ -118,10 +124,10 @@ export function diagnose(scan: LedgerScan, taxonomy: Taxonomy | null): DoctorRep
     checkChainIntegrity(atom, byId, presentIds, findings, repairCandidates);
     checkStatusCoherence(atom, findings);
     if (taxonomy !== null) checkTaxonomy(atom, taxonomy, findings);
+    if (repoFiles !== null) checkBindsStale(atom, repoFiles, findings);
+    checkContextSection(atom, findings);
     checkFrontmatterBodyDrift(atom, findings);
   }
-
-  checkAliasDrift(scan.atoms, findings);
 
   for (const m of scan.malformed) {
     classifyMalformed(m, findings);
@@ -148,7 +154,7 @@ function checkChainIntegrity(
   const fm = atom.frontmatter;
 
   for (const link of fm.supersedes) {
-    const targetId = extractAtomIdFromWikilink(link);
+    const targetId = extractAtomIdFromRef(link);
     if (targetId === null) {
       findings.push({
         check: "chain_integrity",
@@ -170,7 +176,7 @@ function checkChainIntegrity(
     const target = byId.get(targetId);
     if (target === undefined) continue; // file exists but is malformed — flagged separately
     const hasBackLink = target.frontmatter.superseded_by.some(
-      (l) => extractAtomIdFromWikilink(l) === fm.id,
+      (l) => extractAtomIdFromRef(l) === fm.id,
     );
     if (!hasBackLink) {
       findings.push({
@@ -182,13 +188,13 @@ function checkChainIntegrity(
       repairCandidates.push({
         predecessorPath: target.path,
         successorPath: atom.path,
-        wikilink: `[[Decisions/${atom.path.replace(/\.md$/, "")}]]`,
+        successorId: atom.frontmatter.id,
       });
     }
   }
 
   for (const link of fm.superseded_by) {
-    const targetId = extractAtomIdFromWikilink(link);
+    const targetId = extractAtomIdFromRef(link);
     if (targetId === null) {
       findings.push({
         check: "chain_integrity",
@@ -209,9 +215,7 @@ function checkChainIntegrity(
     }
     const target = byId.get(targetId);
     if (target === undefined) continue;
-    const claims = target.frontmatter.supersedes.some(
-      (l) => extractAtomIdFromWikilink(l) === fm.id,
-    );
+    const claims = target.frontmatter.supersedes.some((l) => extractAtomIdFromRef(l) === fm.id);
     if (!claims) {
       findings.push({
         check: "chain_integrity",
@@ -254,59 +258,73 @@ function checkStatusCoherence(atom: ScannedAtom, findings: Finding[]): void {
   }
 }
 
-// ── Alias drift ──────────────────────────────────────────────────────────────
+// ── Taxonomy ─────────────────────────────────────────────────────────────────
 
-function checkAliasDrift(atoms: readonly ScannedAtom[], findings: Finding[]): void {
-  const holders = new Map<string, ScannedAtom[]>();
-  for (const atom of atoms) {
-    for (const alias of atom.frontmatter.aliases) {
-      const slug = normalizeSlug(alias);
-      const list = holders.get(slug) ?? [];
-      list.push(atom);
-      holders.set(slug, list);
-    }
-  }
-
-  for (const [slug, held] of [...holders.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-    if (held.length < 2) continue;
-    const current = held.filter((a) => a.frontmatter.status === "current");
-    const names = held.map((a) => a.path).join(", ");
-    if (current.length > 1) {
+function checkTaxonomy(atom: ScannedAtom, taxonomy: Taxonomy, findings: Finding[]): void {
+  for (const label of atom.frontmatter.labels) {
+    if (!taxonomy.labels.includes(label)) {
       findings.push({
-        check: "alias_drift",
-        kind: "duplicate_among_current",
-        path: current[0]!.path,
-        detail: `slug \`${slug}\` is held by ${current.length} current atoms (${names}) — one slug, one live atom (ndr:0050)`,
-      });
-    } else {
-      findings.push({
-        check: "alias_drift",
-        kind: "stale_alias_on_superseded",
-        path: held[0]!.path,
-        detail: `slug \`${slug}\` is held by ${held.length} atoms (${names}) but at most one is current — supersession should have moved the slug; needs human review`,
+        check: "taxonomy",
+        kind: "unknown_label",
+        path: atom.path,
+        detail: `label \`${label}\` is not in .taxonomy/labels.yaml`,
       });
     }
   }
 }
 
-// ── Taxonomy ─────────────────────────────────────────────────────────────────
-
-function checkTaxonomy(atom: ScannedAtom, taxonomy: Taxonomy, findings: Finding[]): void {
-  const fm = atom.frontmatter;
-  if (!taxonomy.areas.includes(fm.area)) {
-    findings.push({
-      check: "taxonomy",
-      kind: "unknown_area",
-      path: atom.path,
-      detail: `area \`${fm.area}\` is not in .taxonomy/areas.yaml`,
-    });
+// ── Binds staleness ──────────────────────────────────────────────────────────
+// Stale binds: a current head whose glob matches nothing in the repo file
+// list. Advisory — doctor reports, never rewrites (spec: rot-detection).
+// repoFiles === null means the caller had no repo context (flag/env ledger);
+// the class is skipped entirely.
+function checkBindsStale(
+  atom: ScannedAtom,
+  repoFiles: readonly string[],
+  findings: Finding[],
+): void {
+  if (atom.frontmatter.status !== "current") return;
+  for (const pattern of atom.frontmatter.binds) {
+    const glob = new Bun.Glob(pattern);
+    if (!repoFiles.some((f) => glob.match(f))) {
+      findings.push({
+        check: "binds_stale",
+        kind: "binds_matches_nothing",
+        path: atom.path,
+        detail: `binds glob \`${pattern}\` matches no file in the repo — files moved or deleted?`,
+      });
+    }
   }
-  if (!taxonomy.topics.includes(fm.topic)) {
+}
+
+// ── Context section ──────────────────────────────────────────────────────────
+
+const CONTEXT_PLACEHOLDER = "(not reconstructed at migration)";
+
+// Context is a required body section; the migration placeholder marker is the
+// grandfathering signal (advisory kind rather than missing). Section slicing
+// mirrors extractGist: find the heading, cut at the next `##`.
+function checkContextSection(atom: ScannedAtom, findings: Finding[]): void {
+  const idx = atom.body.search(/^##\s+Context\s*$/m);
+  if (idx === -1) {
     findings.push({
-      check: "taxonomy",
-      kind: "unknown_topic",
+      check: "context_section",
+      kind: "missing_context",
       path: atom.path,
-      detail: `topic \`${fm.topic}\` is not in .taxonomy/topics.yaml`,
+      detail: "body has no `## Context` section — required in the new format",
+    });
+    return;
+  }
+  let section = atom.body.slice(idx).replace(/^##\s+Context\s*\n+/, "");
+  const nextHeading = section.search(/^##\s/m);
+  if (nextHeading !== -1) section = section.slice(0, nextHeading);
+  const content = section.trim();
+  if (content.includes(CONTEXT_PLACEHOLDER)) {
+    findings.push({
+      check: "context_section",
+      kind: "placeholder_context",
+      path: atom.path,
+      detail: "Context is the migration placeholder — reconstruct when the atom is next touched",
     });
   }
 }
