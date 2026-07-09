@@ -1,28 +1,22 @@
 ---
 id: "0003"
-title: "Q1 test method = discipline experiment, not build"
+title: Q1 test method = discipline experiment, not build
 status: current
 decision_date: 2026-05-13
-
-project: '[[ndr]]'
-
-derived_from:
-  - "[[Mulling/2026-05-13_decision-capture-pipeline]]"
-informed_by:
-  - "[[Decisions/0002-mvp-scope-one-repo]]"
+author: Jacob Hoehler
+conviction: tentative
+project: ndr
+labels:
+  - process
+  - test-method
+  - meta-chain
+binds: []
 supersedes: []
 superseded_by: []
-
-area: process
-topic: test-method
-impacts: []
-
-revisit_triggers: []
-
-reversibility: medium
-tags:
-  - decision
-  - meta-chain
+derived_from:
+  - Mulling/2026-05-13_decision-capture-pipeline
+informed_by:
+  - "0002"
 ---
 
 # 0003 — Q1 test method = discipline experiment, not build
@@ -35,8 +29,7 @@ Q1 is answered by sustained use of the discipline on real decisions over time, n
 
 Only sustained use produces signal — the corpus has to be lived in.
 
-> [!info]- Full reasoning
-> A build-shaped test gives a binary done/not-done answer that doesn't actually validate the underlying claim (discipline reduces cross-session drift). The hypothesis is about lived practice; the only way to measure that is to live it.
+A build-shaped test gives a binary done/not-done answer that doesn't actually validate the underlying claim (discipline reduces cross-session drift). The hypothesis is about lived practice; the only way to measure that is to live it.
 
 ## Consequences
 

@@ -1,25 +1,23 @@
 ---
-id: '0070'
-title: 'NDR adopts hybrid architecture: swamp canonical, vault as projection'
+id: "0070"
+title: "NDR adopts hybrid architecture: swamp canonical, vault as projection"
 status: superseded
-decision_date: '2026-05-18'
-aliases: []
-project: '[[ndr]]'
+decision_date: 2026-05-18
+author: Jacob Hoehler
+conviction: tentative
+project: ndr
+labels:
+  - substrate
+binds: []
+supersedes:
+  - "0007"
+superseded_by:
+  - "0102"
 derived_from: []
 informed_by:
-- '[[Decisions/0006-readside-decisions-skill]]'
-supersedes:
-- '[[Decisions/0007-mvp-substrate-markdown]]'
-superseded_by:
-- '[[Decisions/0102-markdown-remains-canonical-for-ndrs-swamp-migration-paused]]'
-area: substrate
-topic: substrate
-impacts: []
-revisit_triggers: []
-reversibility: medium
-tags:
-- decision
+  - "0006"
 ---
+
 # 0070 — NDR adopts hybrid architecture: swamp canonical, vault as projection
 
 ## Decision
@@ -30,40 +28,35 @@ Swamp becomes the canonical substrate for decision atoms — typed schema, metho
 
 Decision atoms have accumulated structural weight (supersession enforcement, drift-check, cross-model references) that a note-shaped substrate cannot uphold without bespoke Python glue.
 
-> [!info]- Full reasoning
-> The question was whether decisions are knowledge artifacts that happen to need some structure (vault wins) or structured operational artifacts that happen to render to markdown (swamp wins). The supersession work, the drift-check workflow, and the validator layered on top of `persist.py` each answered that question: atoms are operational artifacts. Swamp provides schema enforcement at persist time — an invalid atom cannot be written, not merely flagged. Cross-model references become typed pointers (Decision → Proxmox VM artifact by swamp id) rather than opaque wikilink strings. The vault read surface is preserved: a `vault-sync` report regenerates `~/Loose Ends/Decisions/*.md` from swamp data, so human workflows are unchanged. The write path moves to `swamp model method run`.
+The question was whether decisions are knowledge artifacts that happen to need some structure (vault wins) or structured operational artifacts that happen to render to markdown (swamp wins). The supersession work, the drift-check workflow, and the validator layered on top of `persist.py` each answered that question: atoms are operational artifacts. Swamp provides schema enforcement at persist time — an invalid atom cannot be written, not merely flagged. Cross-model references become typed pointers (Decision → Proxmox VM artifact by swamp id) rather than opaque wikilink strings. The vault read surface is preserved: a `vault-sync` report regenerates `~/Loose Ends/Decisions/*.md` from swamp data, so human workflows are unchanged. The write path moves to `swamp model method run`.
 
 ## Alternatives
 
 Vault-stays-canonical (0007): keep markdown as substrate, add more Python tooling around it — rejected. Schema-only migration without workflow primitives: rejected as half-measure.
 
-> [!info]- Why they lost
-> - **Vault-stays-canonical (0007):** Every new invariant (alias uniqueness, supersession integrity, cross-model references) requires a new Python validator bolted onto `persist.py`. Swamp provides these as first-class method constraints. The note-shaped substrate cannot scale this without becoming a bespoke database with worse ergonomics.
-> - **Schema-only migration:** Adding a Zod schema without moving workflows gains type safety but loses the method-time enforcement and workflow primitives that justify the migration. Not a stable resting point.
+- **Vault-stays-canonical (0007):** Every new invariant (alias uniqueness, supersession integrity, cross-model references) requires a new Python validator bolted onto `persist.py`. Swamp provides these as first-class method constraints. The note-shaped substrate cannot scale this without becoming a bespoke database with worse ergonomics.
+- **Schema-only migration:** Adding a Zod schema without moving workflows gains type safety but loses the method-time enforcement and workflow primitives that justify the migration. Not a stable resting point.
 
 ## Assumptions
 
 `round-trip-integrity` · `vault-sync-idempotency`
 
-> [!warning]- round-trip-integrity
-> The `migrate` workflow can parse all 69 existing atoms and emit byte-stable (or semantically-identical) markdown from swamp data.
->
-> - **Current state:** unverified — Phase 1 deliverable
-> - **Revisit if:** any atom fails round-trip; the migration halts and this decision is on hold until the gap is closed
+The `migrate` workflow can parse all 69 existing atoms and emit byte-stable (or semantically-identical) markdown from swamp data.
 
-> [!warning]- vault-sync-idempotency
-> The `vault-sync` report produces stable output — running it twice produces identical files.
->
-> - **Current state:** unverified — design assumption
-> - **Revisit if:** report produces non-deterministic output (timestamp injection, ordering drift); fix report before promoting swamp as canonical
+- **Current state:** unverified — Phase 1 deliverable
+- **Revisit if:** any atom fails round-trip; the migration halts and this decision is on hold until the gap is closed
+
+The `vault-sync` report produces stable output — running it twice produces identical files.
+
+- **Current state:** unverified — design assumption
+- **Revisit if:** report produces non-deterministic output (timestamp injection, ordering drift); fix report before promoting swamp as canonical
 
 ## Consequences
 
 Swamp model `@jdh313/ndr/decision` becomes canonical store · Vault `~/Loose Ends/Decisions/*.md` is a regenerated projection · Cross-model references become typed for in-swamp targets · 0007's substrate assumption flips
 
-> [!info]- Detail
-> - `@jdh313/ndr/decision` (and sibling `@jdh313/ndr/taxonomy`) are the write path. Direct markdown edits are no longer authoritative.
-> - Vault files are regenerated by `vault-sync` report. Editing markdown directly is the read surface; changes made there will be overwritten on next sync.
-> - Cross-vault wikilinks (Mulling/, project pages) stay as opaque strings — only in-swamp artifact references become typed pointers.
-> - Round-trip integrity on all 69 existing atoms is the gate between Phase 1 and Phase 2. If it fails, the existing plugin path remains authoritative.
-> - If swamp is later removed, the markdown projection remains readable, but workflow integrations (drift-check, supersession enforcement) revert to today's plugin scripts.
+- `@jdh313/ndr/decision` (and sibling `@jdh313/ndr/taxonomy`) are the write path. Direct markdown edits are no longer authoritative.
+- Vault files are regenerated by `vault-sync` report. Editing markdown directly is the read surface; changes made there will be overwritten on next sync.
+- Cross-vault wikilinks (Mulling/, project pages) stay as opaque strings — only in-swamp artifact references become typed pointers.
+- Round-trip integrity on all 69 existing atoms is the gate between Phase 1 and Phase 2. If it fails, the existing plugin path remains authoritative.
+- If swamp is later removed, the markdown projection remains readable, but workflow integrations (drift-check, supersession enforcement) revert to today's plugin scripts.

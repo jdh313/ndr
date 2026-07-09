@@ -1,28 +1,22 @@
 ---
 id: "0002"
-title: "MVP scope = one repo; substrate decision deferred"
+title: MVP scope = one repo; substrate decision deferred
 status: current
 decision_date: 2026-05-13
-
-project: '[[ndr]]'
-
-derived_from:
-  - "[[Mulling/2026-05-13_decision-capture-pipeline]]"
-informed_by:
-  - "[[Decisions/0001-substrate-team-product-cms]]"
+author: Jacob Hoehler
+conviction: tentative
+project: ndr
+labels:
+  - scope
+  - mvp-scope
+  - meta-chain
+binds: []
 supersedes: []
 superseded_by: []
-
-area: scope
-topic: mvp-scope
-impacts: []
-
-revisit_triggers: []
-
-reversibility: medium
-tags:
-  - decision
-  - meta-chain
+derived_from:
+  - Mulling/2026-05-13_decision-capture-pipeline
+informed_by:
+  - "0001"
 ---
 
 # 0002 — MVP scope = one repo; substrate decision deferred
@@ -35,8 +29,7 @@ The MVP is a single personal-discipline repo. The substrate question (Decision 0
 
 Q1 ("does this discipline help me?") is upstream of substrate choice.
 
-> [!info]- Full reasoning
-> Building the team product first is too speculative — settling substrate before discipline is validated risks building the wrong thing twice. Personal-discipline tool comes first; substrate question becomes addressable once Q1 has data.
+Building the team product first is too speculative — settling substrate before discipline is validated risks building the wrong thing twice. Personal-discipline tool comes first; substrate question becomes addressable once Q1 has data.
 
 ## Consequences
 
