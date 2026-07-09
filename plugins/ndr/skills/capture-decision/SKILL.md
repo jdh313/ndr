@@ -1,6 +1,6 @@
 ---
 name: capture-decision
-description: Capture engineering decisions from the current conversation as atomic markdown artifacts in the decision ledger. Use when the user invokes `/capture-decision`, says "capture this decision", "record this", "let's write this up as a decision", or signals at end of a chat that decisions landed and should be persisted. Materializes one file per atomic decision with required frontmatter, enforces taxonomy, and structurally protects the supersession primitive (refuses to write a revising decision without `supersedes:`). The write itself goes through `ndr capture` — the CLI owns id assignment, validation, and the three-write supersession transaction.
+description: Capture engineering decisions from the current conversation as atomic markdown artifacts in the decision ledger. Use when the user invokes `/capture-decision`, says "capture this decision", "record this", "let's write this up as a decision", or signals at end of a chat that decisions landed and should be persisted. Materializes one file per atomic decision with required frontmatter, enforces taxonomy, and structurally protects the supersession primitive (refuses to write a revising decision without `supersedes:`). The write itself goes through `ndr capture` — the CLI owns id assignment, validation, and the two-write supersession transaction.
 argument-hint: "[optional hint about what to capture]"
 allowed-tools:
   - Bash
@@ -38,11 +38,9 @@ These constraints are upstream of any subagent — the skill enforces them at th
 2. **Supersession refusal is structural, not advisory.** If revising intent appears in the conversation ("revises", "supersedes", "instead of", "we changed our mind on") OR `informed_by:` points at a `current` decision being contradicted, AND the user has not named what's being superseded — refuse to proceed. Print:
    > "This looks like a revising decision but `supersedes:` is empty. Name the decision(s) being revised, or confirm this is a fresh decision."
 3. **Review-then-persist.** No draft hits disk until the reviewer passes and the user accepts. There is no `draft` status. Drafts live in memory.
-4. **Taxonomy enforcement.** `area:` and `topic:` must come from `<ledger>/.taxonomy/{areas,topics}.yaml`. Unknown values trigger "use existing or add new?" before drafting. `ndr capture` re-checks; the orchestrator's check is the friendly-prompt layer.
-5. **Single-file atoms.** `<id>-<kebab-title>.md`. No directory form, no descent files. Length is managed by hybrid altitude callouts inside the file.
+4. **Labels enforcement.** `labels:` (1-4 values) must come from `<ledger>/.taxonomy/labels.yaml`. Unknown values trigger "use existing or add new?" before drafting. `ndr capture` re-checks; the orchestrator's check is the friendly-prompt layer.
+5. **Single-file atoms.** `<id>-<kebab-title>.md`. No directory form, no descent files. Length is managed by the fixed section shape in the body template (single altitude, plain markdown, no callouts).
 6. **The CLI assigns ids.** Atoms get 6-char base32 ids generated inside `ndr capture` (ndr:0144). Never assign or guess an id in a draft; the body's `# PLACEHOLDER —` heading is patched by the CLI.
-7. **Lazy slug minting.** Default `aliases: []`. Only mint a slug when the user signals atom-grain external referenceability is needed. `ndr-` namespace prefix. Most atoms never carry a slug.
-8. **Slug uniqueness.** Enforced vault-wide inside `ndr capture`. For a friendlier preflight, `ndr resolve '#<slug>'` exiting 0 means the slug is taken.
 
 ## Inputs
 
@@ -51,7 +49,7 @@ These constraints are upstream of any subagent — the skill enforces them at th
 ## Reference paths
 
 - **Ledger:** resolved by the CLI — `--ledger` flag > `NDR_LEDGER` env > `.ndr.toml` walk-up from CWD > error pointing at `ndr init`. One atom per file, `<id>-<kebab-title>.md`.
-- **Taxonomy (ledger-resident, mutable):** `<ledger>/.taxonomy/{areas,topics}.yaml`.
+- **Taxonomy (ledger-resident, mutable):** `<ledger>/.taxonomy/labels.yaml`.
 - **Schema spec:** `${CLAUDE_PLUGIN_ROOT}/references/frontmatter-schema.md`.
 - **Template:** `${CLAUDE_PLUGIN_ROOT}/references/decision-single.md`.
 - **Worthiness rubric:** `${CLAUDE_PLUGIN_ROOT}/references/worthiness.md` — three-question test for "is this NDR-grain or should it route elsewhere?"
@@ -78,7 +76,7 @@ Discard non-decisions: open questions, observations, tasks, hypotheticals.
 Before confirming candidates, scan the conversation for revising intent:
 
 - Phrases: "revises", "supersedes", "instead of", "we changed our mind on", "switching from X to Y".
-- Substantive: a candidate directly contradicts a decision named in `informed_by:` context, or named in chat by id/slug.
+- Substantive: a candidate directly contradicts a decision named in `informed_by:` context, or named in chat by id.
 
 For each candidate with revising signal, you'll need to ask the user: **what is being superseded?** Note this against the candidate; ask in Step 3.
 
@@ -111,7 +109,7 @@ I see N atomic decisions in this conversation:
 
   1. Use FastAPI for the auth service
   2. Single Postgres instance, no read replicas at MVP
-  3. Switch from JWT to PASETO  ← revises a prior decision; which one? (id, slug, or wikilink)
+  3. Switch from JWT to PASETO  ← revises a prior decision; which one? (atom id)
   4. Use stacked-files layout for multi-disc Jellyfin rips
        └─ borderline: convention-with-rationale; consider also adding a homelab CLAUDE.md entry referencing this NDR
   5. Use 4-space indentation in tools/audit.py
@@ -123,22 +121,21 @@ Confirm, edit titles, drop any, route, or answer the revising question.
 Wait for the user's response. Capture for each confirmed candidate:
 
 - Title (user can edit)
-- `supersedes:` list (wikilinks like `[[Decisions/0042-...]]`) — required when revising signal triggered; defaults to `[]`.
-- Whether to mint a slug (default no).
+- `supersedes:` list (plain atom ids like `["0042"]`) — required when revising signal triggered; defaults to `[]`.
 
 If revising signal triggered and the user neither named a predecessor nor confirmed "this is fresh", refuse. Print the rule-2 message and stop.
 
-### Step 4 — Taxonomy preflight (optional but friendly)
+### Step 4 — Labels preflight (optional but friendly)
 
-For each candidate, suggest an `area:` and `topic:` based on the conversation. Read `<ledger>/.taxonomy/{areas,topics}.yaml` once and cache. If a suggested value is not in the taxonomy:
+For each candidate, suggest 1-4 `labels:` based on the conversation. Read `<ledger>/.taxonomy/labels.yaml` once and cache. If a suggested value is not in the taxonomy:
 
 ```
-"<value>" is not in <areas.yaml | topics.yaml>.
+"<value>" is not in labels.yaml.
 Use existing: <comma-separated list>
 Or add new: <value>?
 ```
 
-If "add new", `Edit` the relevant YAML file to append the value before drafting. `ndr capture` will re-validate — this preflight is friendly UX, not the structural gate.
+If "add new", `Edit` `labels.yaml` to append the value before drafting. `ndr capture` will re-validate — this preflight is friendly UX, not the structural gate.
 
 ### Step 5 — Delegate composition
 
@@ -151,16 +148,15 @@ Invoke the `ndr-drafter` subagent. Pass:
       "title": "Use FastAPI for the auth service",
       "gist": "...",
       "quotes": ["..."],
-      "suggested_area": "tooling",
-      "suggested_topic": "substrate",
-      "suggested_project": "[[Auth Rewrite]]",
+      "suggested_labels": ["tooling", "substrate"],
+      "suggested_project": "Auth Rewrite",
       "supersedes": [],
-      "derived_from": ["[[<chat / mull source>]]"],
+      "derived_from": ["<chat / mull source path or ref>"],
       "informed_by": [],
       "decision_date": "<ISO today>",
-      "project": "[[Auth Rewrite]]",
-      "mint_slug": false,
-      "slug": null
+      "project": "Auth Rewrite",
+      "conviction": "tentative",
+      "binds": []
     }
   ]
 }
@@ -199,7 +195,7 @@ The body's `# PLACEHOLDER —` heading is patched to the assigned id by the CLI 
 
 **Branch on the exit code before touching stdout** (ndr:0146 — errors go to stderr as JSON; stdout is only populated on success):
 
-- `0` — success. Parse stdout: `{id, path, superseded, aliases_moved}` (arrays even for one predecessor). Accumulate for the summary.
+- `0` — success. Parse stdout: `{id, path, superseded}` (array even for one predecessor). Accumulate for the summary.
 - `1` — validation failure (bad JSON, required fields, enums, taxonomy). Surface `error.messages` and loop back to drafting for that atom.
 - `2` — supersession conflict (predecessor already superseded by a different atom). Surface and stop — manual resolution.
 - `3` — mid-transaction failure (half-state). Surface the half-state report so the user knows exactly what was written vs patched and what to repair by hand.
@@ -208,7 +204,7 @@ Continue the loop for remaining drafts only after exit 0; on 2 or 3, stop the ru
 
 ### Step 8 — Summarize
 
-Report what was written, what was patched, and any alias handovers. One line per file. See Output examples below.
+Report what was written and what was patched. One line per file. See Output examples below.
 
 ## When to use the extractor subagent
 
@@ -228,25 +224,23 @@ The extractor returns the same `{candidates: [...]}` structure that Step 3 expec
 Captured 1 decision:
 
   k3m9xq-use-fastapi-for-auth.md
-    area: tooling, topic: substrate
+    labels: [tooling, substrate]
     supersedes: [] (fresh decision)
 ```
 
-### Revising decision with alias handover
+### Revising decision
 
 ```
-Captured 1 decision with supersession + alias handover:
+Captured 1 decision with supersession:
 
   v8t2ne-split-apps-into-services.md (successor)
-    area: architecture, topic: repo-shape
-    supersedes: ["[[Decisions/0011-monorepo-symmetric-apps-layout]]"]
-    aliases: [ndr-monorepo-shape]  (moved from 0011)
+    labels: [architecture, repo-shape]
+    supersedes: ["0011"]
 
   Patched:
     0011-monorepo-symmetric-apps-layout.md
       status: current → superseded
-      superseded_by: [] → ["[[Decisions/v8t2ne-split-apps-into-services]]"]
-      aliases: [ndr-monorepo-shape] → []
+      superseded_by: [] → ["v8t2ne"]
 ```
 
 ### Refused (supersession-blind)
@@ -265,13 +259,11 @@ Name the decision being revised, or confirm this is fresh.
 HALF-STATE during supersession:
 
   Successor written: v8t2ne-split-apps-into-services.md
-  Aliases moved: [ndr-monorepo-shape]
-  Patch failed on: [[Decisions/0011-monorepo-symmetric-apps-layout]]
+  Patch failed on: 0011-monorepo-symmetric-apps-layout.md
   Reason: file not found
 
 Manual fix: edit 0011-..., set status: superseded,
-append "[[Decisions/v8t2ne-split-apps-into-services]]" to superseded_by,
-clear aliases: [].
+append "v8t2ne" to superseded_by.
 ```
 
 ## When NOT to use this skill
@@ -284,7 +276,7 @@ clear aliases: [].
 
 - `/decisions <topic>` — the read-side companion. Use it BEFORE capture to check whether a current decision on the topic already exists (avoid accidental parallel decisions).
 - `/interrogate-decision` — the deep pre-capture deliberation. Run it BEFORE this skill when a candidate is consequential enough to stress-test (genuine fork, possible supersession, "is this even a decision?"); it produces a routing verdict and hands the confirmed candidate here.
-- `ndr capture` — the deterministic write path (ndr:0129, ndr:0146); owns ids (ndr:0144) and the three-write supersession transaction (ndr:0051).
+- `ndr capture` — the deterministic write path (ndr:0129, ndr:0146); owns ids (ndr:0144) and the two-write supersession transaction (ndr:0051).
 - `ndr-extractor` — long-source candidate extraction.
 - `ndr-drafter` — frontmatter + body composition.
 - `ndr-reviewer` — pre-persist judge (atomicity, body altitude, soft mechanical checks).
