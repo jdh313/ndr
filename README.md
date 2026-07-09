@@ -41,7 +41,28 @@ catch-all is just a `.ndr.toml` higher up the walk (e.g. at `~`).
 ```toml
 # .ndr.toml — written by `ndr init`
 ledger = "./decisions"   # required; relative paths resolve against this file, ~/ expands
-project = "[[my-repo]]"  # optional project wikilink
+project = "my-repo"      # optional; free-form (defaults to the directory name)
+```
+
+Every atom's frontmatter follows one strict schema:
+
+```yaml
+---
+id: "z7s9sq"          # locally-generated 6-char base32 (legacy atoms keep a 4-digit id)
+title: okta becomes the identity substrate
+status: current        # current | superseded | retracted
+decision_date: 2026-07-08
+author: Jacob Hoehler   # auto-filled from `git config user.name` at capture time
+conviction: strong      # strong | tentative | arbitrary — how strongly the decision is held
+project: my-repo        # plain string
+labels:                 # 1-4 values, gated by <ledger>/.taxonomy/labels.yaml
+  - substrate
+binds: []                # globs this decision binds; `doctor` flags stale entries
+supersedes: []
+superseded_by: []
+derived_from: []
+informed_by: []
+---
 ```
 
 ## Usage
@@ -56,12 +77,8 @@ ndr resolve 0070
 # Point at a different ledger directory
 ndr resolve 0049 --ledger ./test/fixtures/ledger
 
-# Slug grain — resolve a minted alias to its current head (slugs track forward,
-# so there is no drift to surface)
-ndr resolve '#oxc-stack' --ledger ./test/fixtures/ledger
-
-# Topic grain — list every current head in an area/topic pair
-ndr resolve substrate/substrate
+# Label grain — list every current head carrying a taxonomy label
+ndr resolve framework --ledger ./test/fixtures/ledger
 
 # --full — the resolved head's complete body (Decision / Consequences /
 # Assumptions), not just the one-line gist; still walks supersession
@@ -77,26 +94,31 @@ ndr search okta
 # Walk a supersession chain explicitly
 ndr lineage 0070
 
-# List current atoms, optionally filtered; --verbose expands to full briefs
-ndr current --area tooling
-ndr current --area tooling --topic lint-format --verbose
+# List current atoms, optionally filtered by label; --verbose expands to full briefs
+ndr current --label framework
+ndr current --label framework --verbose
 
 # Any read verb takes --json for structured output (consumed by the skills/library)
 ndr resolve 0070 --json
 ndr current --json
 
-# List the taxonomy axes for the resolved ledger
-ndr areas
-ndr topics --json
+# List the labels in the resolved ledger's taxonomy
+ndr labels
+ndr labels --json
 
 # Capture a decision atom — draft JSON from a file or stdin. Prints the written
-# {id, path, superseded, aliases_moved}. Exit codes: 0 ok / 1 validation /
+# {id, path, superseded, advisories}. author auto-fills from `git config
+# user.name` when the draft omits it. Exit codes: 0 ok / 1 validation /
 # 2 supersession conflict / 3 mid-write half-state.
 ndr capture draft.json --ledger ./test/fixtures/ledger
 echo "$DRAFT_JSON" | ndr capture --ledger ./test/fixtures/ledger
 
+# Mechanically migrate old-format atoms to the new schema (pass 1; idempotent).
+# Pass 2 (body reshaping) is judgment work, not covered by this command.
+ndr migrate --ledger ./test/fixtures/ledger --dry-run
+
 # Corpus health checks — grouped human report, exit 1 when findings exist
-ndr doctor --ledger ./test/fixtures/doctor-ledger
+ndr doctor --ledger ./test/fixtures/ledger
 ndr doctor --json                 # structured report for machine consumers
 ndr doctor --fix                  # repair missing superseded_by back-links (the one auto-fixable class)
 ```
@@ -106,24 +128,27 @@ back. `ndr status` reports the unconfigured case instead of erroring.
 
 ## What works today
 
-- **Reads** — `ndr resolve` handles all three reference grains (atom-id, `#slug`,
-  `area/topic`), with `--full` for the head's complete body and `ndr show` for a
-  single atom's frozen body without walking the chain. `ndr search`, `ndr lineage`,
-  and `ndr current` round out the read verbs. Corpus-wide verbs skip a malformed
-  atom with a warning; targeted `resolve <id>` still throws.
-- **Writes** — `ndr capture` lands the full contract: schema + taxonomy validation,
-  vault-wide slug uniqueness, three-write supersession with alias handover, and
+- **Reads** — `ndr resolve` handles both reference grains (atom-id and label),
+  with `--full` for the head's complete body and `ndr show` for a single atom's
+  frozen body without walking the chain. `ndr search`, `ndr lineage`,
+  `ndr current`, and `ndr labels` round out the read verbs. Corpus-wide verbs
+  skip a malformed atom with a warning; targeted `resolve <id>` still throws.
+- **Writes** — `ndr capture` lands the full contract: schema + taxonomy
+  validation, author auto-fill from `git config user.name`, two-write
+  supersession (successor written first, then predecessors patched) with
+  advisories for binds-narrowing and cross-author supersession, and
   locally-generated base32 ids. Reads a draft as JSON on stdin.
-- **Health** — `ndr doctor` runs corpus checks over a ledger: bidirectional
-  supersession integrity, orphan refs, status coherence, alias drift, taxonomy
-  violations, missing fields, frontmatter/body drift, and malformed files.
-  Read-only by default; `--fix` repairs missing `superseded_by` back-links idempotently.
+- **Health** — `ndr doctor` runs corpus checks over a ledger: chain integrity
+  (including dangling/orphan refs), status coherence, taxonomy violations,
+  stale `binds` globs, missing `## Context` sections, missing required fields,
+  frontmatter/body drift, and malformed files. Read-only by default; `--fix`
+  repairs missing `superseded_by` back-links idempotently.
 
 ## The library
 
 The CLI sits on a small library you can import directly:
 
-- `Atom`, `AtomId`, `Slug`, `Reference`, `Ledger` — domain types (`src/domain/`).
+- `Atom`, `AtomId`, `Reference`, `Ledger` — domain types (`src/domain/`).
 - `ReadPort`, `WritePort` — backend interfaces (`src/ports/`).
 - `MarkdownLedgerAdapter` — the first concrete adapter; reads/writes a directory
   of `<id>-<kebab-title>.md` files. Its parse pipeline is fence split ->
