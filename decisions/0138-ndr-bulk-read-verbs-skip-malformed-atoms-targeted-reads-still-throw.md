@@ -25,24 +25,25 @@ informed_by:
 
 Corpus-wide read verbs (search, current, slug resolution, topic-grain resolve) skip schema-invalid atoms with a stderr warning and continue; targeted reads (getAtom / resolve by id) throw AtomValidationError and fail loudly.
 
+## Commitments
+
+- Corpus commands return partial results when atoms are malformed — the caller gets everything the vault can serve, plus a named warning to fix what it cannot.
+- Malformed-atom warnings follow a fixed, machine-parseable format: `ndr: skipping malformed atom <file> (<reason>)`.
+- Targeted id resolution keeps strict failure semantics — a zero-exit from `getAtom` or `resolve <id>` guarantees a valid atom was returned.
+- This lives entirely in `MarkdownLedgerAdapter.readAllAtoms`; the port interface is unchanged.
+
+## Context
+
+- `ndr search` crashed on encountering the first schema-invalid atom in `~/Loose Ends/Decisions/`.
+- The vault can hold potentially hundreds of atoms; one bad record aborting an entire corpus-wide command makes the tool unusable against a live vault.
+- Corpus-wide verbs (search, current, slug/topic resolution) are inherently best-effort scans over the whole ledger.
+- Targeted reads (getAtom, resolve by id) are a different contract — the caller names a specific atom and expects either that atom or an error.
+
 ## Why
 
-A single malformed atom in a large vault should not abort a corpus-wide command; a direct lookup of a known-bad atom should never silently succeed.
-
-Discovered when `ndr search` crashed on the first malformed atom in `~/Loose Ends/Decisions/`. With potentially hundreds of atoms, one bad record aborting the entire command makes the tool unusable against a live vault. Corpus verbs are inherently best-effort scans — skipping with a named warning (`ndr: skipping malformed atom <file> (<reason>)`) preserves the useful output while surfacing the problem actionably. Targeted reads are a different contract: the caller named a specific atom and expects either the atom or an error. Swallowing AtomValidationError there would mask data corruption.
+A single malformed atom in a large vault should not abort a corpus-wide command; a direct lookup of a known-bad atom should never silently succeed. Skipping with a named warning preserves the useful output while surfacing the problem actionably. Swallowing `AtomValidationError` on a targeted read would mask data corruption instead.
 
 ## Alternatives
 
-Abort all corpus verbs on first bad atom (rejected) · Silently skip with no warning (rejected).
-
-- **Abort on first bad atom:** the original behavior; crashed `ndr search` against the real vault. Treats a corpus scan with the same contract as a targeted lookup — wrong model.
-- **Silent skip:** degrades gracefully but gives no signal that the atom is broken. The warning is the whole point — it names the file and reason so the author can fix the source data.
-
-## Consequences
-
-Corpus commands return partial results when atoms are malformed · Malformed atoms produce actionable stderr lines naming file and reason · Targeted id resolution retains strict failure semantics
-
-- Partial results on corpus verbs are safe: the caller gets everything the vault can serve, plus the signal to fix what it cannot.
-- The warning format (`ndr: skipping malformed atom <file> (<reason>)`) is machine-parseable enough for a lint pass to harvest.
-- Strict targeted-read behavior means `getAtom` and `resolve <id>` are reliable for scripting — a zero-exit from those verbs guarantees a valid atom was returned.
-- Implemented in `MarkdownLedgerAdapter.readAllAtoms`; no change to the port interface.
+- **Abort all corpus verbs on first bad atom** — rejected: the original behavior; crashed `ndr search` against the real vault; treats a corpus scan with the same contract as a targeted lookup, the wrong model.
+- **Silently skip with no warning** — rejected: degrades gracefully but gives no signal the atom is broken; the warning is the whole point — it names the file and reason so the author can fix the source data.

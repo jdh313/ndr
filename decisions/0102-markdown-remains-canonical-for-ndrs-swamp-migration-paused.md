@@ -22,44 +22,34 @@ informed_by: []
 
 Markdown is the canonical substrate for NDR atoms. The swamp migration defined in 0070 is paused — not cancelled — pending concrete evidence the current setup cannot handle operating needs.
 
+## Commitments
+
+- The swamp migration work (model definitions, vault-sync, drift-check integration) stays paused, not deleted — 0070 remains a valid direction if concrete pain emerges.
+- `swamp model method run` does not become the write path; the capture-decision skill continues writing to markdown via `persist.py`.
+
+## Revisit if
+
+- Cross-type queries or supersession-chain traversal cannot be satisfied by obsidian-cli `base:query` and MCP `search_notes`.
+- A concrete failure mode emerges (slow traversal, query gap, drift between canonical and access layer).
+
+## Context
+
+- 0070 (the swamp migration) was decided 2026-05-18, six days before this atom, and neither its Phase 1 (round-trip integrity) nor Phase 2 (promoting swamp as canonical) had been executed.
+- Logseq's 2+ year DB-migration serves as a cautionary tale for DB-canonical storage at personal scale.
+- 99 NDR atoms had been captured since 0070 with no friction reported that would justify migration.
+- basic-memory, Zensical, and Dendron all operate files-canonical at personal scale.
+- 0100's obsidian-cli consolidation reduced the Obsidian-tool-friction motivation that had helped justify 0070.
+- No concrete pain existed that the current markdown setup could not handle.
+- (Update 2026-06-01) The repo collaboration path for NDR ledgers (per 0130) means coworkers consume atoms via GitHub render, which cannot read SQLite.
+
 ## Why
 
-The supersession chain head must reflect actual operating state — the system is markdown-canonical and 0070 was never executed.
+The supersession chain head must reflect actual operating state, and the system was operating markdown-canonical with 0070 never executed. The inputs above weakened the case for executing the migration now, and the opportunity cost of weekend cycles on migration work had become visible. The decision is durational — swamp may become the right answer when a real trigger emerges — but the chain head must reflect how the system is actually operating, consistent with 0101's deferral of atoms-first generalization.
 
-0070 was decided 2026-05-18 — six days before this atom. Neither Phase 1 (round-trip integrity for existing atoms) nor Phase 2 (promoting swamp as canonical) has been executed. In the intervening days, several inputs weakened the case for executing the migration now: Logseq's 2+ year DB-migration serves as a cautionary tale for DB-canonical at personal scale; 99 NDR atoms have been captured since 0070 was made with no friction emerging that would justify migration; basic-memory, Zensical, and Dendron all operate files-canonical at personal scale; 0100's obsidian-cli consolidation reduced the Obsidian-tool-friction motivation that helped justify 0070; and no concrete pain exists that the current markdown setup cannot handle. The decision is durational — swamp may become the right answer when a real trigger emerges — but the head of the supersession chain must reflect how the system is actually operating.
-
-**Update (2026-06-01, per [[Mulling/2026-05-31_ndr-shape-and-storage]]):** A structurally stronger reason has emerged. The repo collaboration path for NDR ledgers (per [[Decisions/0130-ndr-decisions-are-project-scoped-with-no-cross-project-tier]]) forecloses DB-canonical replacement — coworkers consuming atoms via GitHub render cannot read SQLite. Replacement is now structurally foreclosed by collaboration requirements, not just deferred for lack of pain. Augmentation sidecars (FTS, vector, graph) remain in scope as an additive layer; they do not contradict markdown-canonical.
+**Update (2026-06-01, per [[Mulling/2026-05-31_ndr-shape-and-storage]]):** A structurally stronger reason emerged: the repo collaboration path forecloses DB-canonical replacement outright, not just defers it for lack of pain. Augmentation sidecars (FTS, vector, graph) remain in scope as an additive layer; they do not contradict markdown-canonical.
 
 ## Alternatives
 
-Execute 0070 as planned (rejected) · Pause-atom without superseding 0070 (rejected) · Drop 0070 and revert to 0007 (rejected)
-
-**Execute 0070 as planned:** No concrete pain has emerged that the current markdown setup cannot handle. Assumptions behind 0070 have weakened in the six days since it was made, and the opportunity cost of weekend cycles on the migration work is now visible.
-
-**Pause-atom without superseding 0070:** This was the initial framing in the session that produced this decision. It leaves 0070 at the chain head while the system operates as markdown-canonical — exactly the drift supersession is designed to prevent. A pause-atom that doesn't supersede is a workaround, not a clean record.
-
-**Drop 0070 and revert to 0007:** 0070 is not wrong — assumptions shifted. Reverting would misrepresent the history. This is also not a return to 0007's framing: 0007 recorded "MVP substrate is markdown" with an implicit assumption of temporariness. The current state is "markdown is canonical until a real trigger emerges" — a different claim.
-
-## Assumptions
-
-`obsidian-cli-plus-mcp-sufficient` · `no-concrete-pain-yet`
-
-The obsidian-cli tier-2 MCP access layer (per 0100) is sufficient for all NDR read/write operations at current scale.
-
-- **Current state:** active — 99 atoms, no reported friction as of 2026-05-24
-- **Revisit if:** cross-type queries or supersession-chain traversal cannot be satisfied by obsidian-cli base:query and MCP search_notes
-
-The current markdown + obsidian-cli setup handles all operating needs with no pain that would justify migration work.
-
-- **Current state:** active — consistent with 0101 deferral of atoms-first generalization
-- **Revisit if:** a concrete failure mode emerges (slow traversal, query gap, drift between canonical and access layer)
-
-## Consequences
-
-Markdown stays canonical · Swamp migration work paused (not deleted) · 0070 status flips to superseded · persist.py write path unchanged · consistent with 0101 atoms-first deferral
-
-- Markdown is the canonical NDR substrate. No change to how atoms are written or read.
-- The swamp migration work (model definitions, vault-sync, drift-check integration) is paused, not deleted. 0070 stands as a valid direction if concrete pain emerges.
-- 0070's status flips to superseded; this atom becomes the chain head.
-- `swamp model method run` does NOT become the write path. The capture-decision skill continues writing to markdown via persist.py.
-- This is consistent with 0101 (atoms-first generalization deferred) — both atoms record the same direction: don't expand or migrate substrate until evidence demands it.
+- **Execute 0070 as planned** — rejected: no concrete pain had emerged that the current markdown setup could not handle, assumptions behind 0070 had weakened in the six days since it was made, and the opportunity cost of weekend cycles on migration work was now visible.
+- **Pause-atom without superseding 0070** — rejected: the initial framing in the session that produced this decision; it leaves 0070 at the chain head while the system operates markdown-canonical — exactly the drift supersession is designed to prevent, and a pause without superseding is a workaround, not a clean record.
+- **Drop 0070 and revert to 0007** — rejected: 0070 is not wrong, assumptions shifted, so reverting would misrepresent history. It is also not a true return to 0007's framing: 0007 recorded "MVP substrate is markdown" with an implicit assumption of temporariness, while the current state is "markdown is canonical until a real trigger emerges" — a different claim.

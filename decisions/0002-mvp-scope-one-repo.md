@@ -25,12 +25,15 @@ informed_by:
 
 The MVP is a single personal-discipline repo. The substrate question (Decision 0001) is deferred until the discipline has been validated by use.
 
+## Commitments
+
+- Team-product architecture (0001) is preserved but deferred, not abandoned.
+- Current build target is the one-repo personal MVP.
+
+## Context
+
+- Q1 ("does this discipline help me?") is upstream of the substrate choice.
+
 ## Why
 
-Q1 ("does this discipline help me?") is upstream of substrate choice.
-
-Building the team product first is too speculative — settling substrate before discipline is validated risks building the wrong thing twice. Personal-discipline tool comes first; substrate question becomes addressable once Q1 has data.
-
-## Consequences
-
-Team-product architecture (0001) is preserved but deferred. Current build target is the one-repo personal MVP.
+Building the team product first is too speculative: settling substrate before discipline is validated risks building the wrong thing twice. The personal-discipline tool comes first; the substrate question becomes addressable once Q1 has data.
