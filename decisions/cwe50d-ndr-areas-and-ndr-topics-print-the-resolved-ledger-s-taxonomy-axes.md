@@ -1,7 +1,7 @@
 ---
 id: "cwe50d"
 title: ndr areas and ndr topics print the resolved ledger's taxonomy axes
-status: current
+status: superseded
 decision_date: 2026-06-07
 author: Jacob Hoehler
 conviction: tentative
@@ -11,7 +11,8 @@ labels:
   - read-side
 binds: []
 supersedes: []
-superseded_by: []
+superseded_by:
+  - 75pwek
 derived_from:
   - ndr CLI session 2026-06-07
 informed_by: []

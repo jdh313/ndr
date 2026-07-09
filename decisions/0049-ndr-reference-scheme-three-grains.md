@@ -1,7 +1,7 @@
 ---
 id: "0049"
 title: "NDR references use ndr: prefix with three grains — atom-id, slug, topic"
-status: current
+status: superseded
 decision_date: 2026-05-15
 author: Jacob Hoehler
 conviction: tentative
@@ -12,7 +12,8 @@ labels:
   - meta-chain
 binds: []
 supersedes: []
-superseded_by: []
+superseded_by:
+  - r3ffp4
 derived_from:
   - Personal/Projects/Decision Pipeline — Reference Addressability
 informed_by:

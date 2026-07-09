@@ -1,7 +1,7 @@
 ---
 id: "0051"
 title: Supersession with a slug is a three-write atomic primitive
-status: current
+status: superseded
 decision_date: 2026-05-15
 author: Jacob Hoehler
 conviction: tentative
@@ -12,7 +12,8 @@ labels:
   - meta-chain
 binds: []
 supersedes: []
-superseded_by: []
+superseded_by:
+  - 8gh40e
 derived_from:
   - Decisions/0050-slugs-as-aliases-minted-lazily
 informed_by:
