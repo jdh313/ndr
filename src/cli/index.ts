@@ -863,12 +863,31 @@ export async function captureCommand(
 export interface DoctorOptions {
   readonly fix?: boolean;
   readonly json?: boolean;
+  // Repo root for binds-staleness checks. Undefined (the production default)
+  // derives it from the resolved .ndr.toml's directory; null explicitly skips
+  // the binds_stale class (e.g. a flag/env ledger with no repo context).
+  readonly repoRoot?: string | null;
 }
 
 interface RepairApplied {
   readonly path: string;
   readonly kind: "appended_back_pointer";
   readonly value: string;
+}
+
+// File inventory for binds checks. `git ls-files` respects .gitignore and is
+// fast; a non-git root (or no root at all) yields null, which skips the
+// binds_stale class rather than failing the sweep.
+async function listRepoFiles(repoRoot: string | null): Promise<string[] | null> {
+  if (repoRoot === null) return null;
+  try {
+    const { stdout } = await execFileAsync("git", ["-C", repoRoot, "ls-files"], {
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    return stdout.split("\n").filter((l) => l.length > 0);
+  } catch {
+    return null;
+  }
 }
 
 // Corpus health checks (JUN-178, absorbing the ndr-curator agent's mechanical
@@ -882,13 +901,21 @@ export async function doctorCommand(
 ): Promise<ResolveResult> {
   const adapter = new MarkdownLedgerAdapter(ledgerPath);
   const taxonomy = await adapter.readTaxonomy();
-  let report = diagnose(await adapter.scanLedger(), taxonomy);
+
+  let repoRoot = opts.repoRoot;
+  if (repoRoot === undefined) {
+    const config = findRepoConfigSafe(process.cwd());
+    repoRoot = config ? path.dirname(config.configPath) : null;
+  }
+  const repoFiles = await listRepoFiles(repoRoot);
+
+  let report = diagnose(await adapter.scanLedger(), taxonomy, repoFiles);
 
   const repairsApplied: RepairApplied[] = [];
   if (opts.fix === true) {
     for (const candidate of report.repairCandidates) {
       try {
-        await adapter.repairBackPointer(candidate.predecessorPath, candidate.wikilink);
+        await adapter.repairBackPointer(candidate.predecessorPath, candidate.successorId);
       } catch (err) {
         return {
           stdout: "",
@@ -910,19 +937,20 @@ export async function doctorCommand(
       repairsApplied.push({
         path: candidate.predecessorPath,
         kind: "appended_back_pointer",
-        value: candidate.wikilink,
+        value: candidate.successorId,
       });
     }
     // Re-diagnose so the report shows what is still wrong after the repairs —
     // this also makes a second --fix run naturally find nothing to repair.
     if (repairsApplied.length > 0) {
-      report = diagnose(await adapter.scanLedger(), taxonomy);
+      report = diagnose(await adapter.scanLedger(), taxonomy, repoFiles);
     }
   }
 
-  const stderr = report.taxonomyChecked
+  let stderr = report.taxonomyChecked
     ? ""
     : `ndr: no readable .taxonomy/ in ${ledgerPath} — taxonomy checks skipped\n`;
+  if (repoFiles === null) stderr += "ndr: no repo root — binds checks skipped\n";
   const stdout =
     opts.json === true
       ? formatDoctorJson(report, ledgerPath, repairsApplied)
@@ -948,8 +976,9 @@ function doctorSummary(report: DoctorReport, repairs: readonly RepairApplied[]):
 const CHECK_CLASS_LABELS: Record<CheckClass, string> = {
   chain_integrity: "chain integrity",
   status_coherence: "status coherence",
-  alias_drift: "alias drift",
   taxonomy: "taxonomy",
+  binds_stale: "stale binds",
+  context_section: "context section",
   missing_fields: "missing required fields",
   frontmatter_body_drift: "frontmatter/body drift",
   malformed: "malformed",
@@ -1012,7 +1041,7 @@ function formatDoctorJson(
         repair_candidates: report.repairCandidates.map((c: RepairCandidate) => ({
           path: c.predecessorPath,
           successor: c.successorPath,
-          value: c.wikilink,
+          value: c.successorId,
         })),
         repairs_applied: repairs,
         summary: doctorSummary(report, repairs),

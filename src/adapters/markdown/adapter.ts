@@ -465,16 +465,16 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort, DoctorPort {
     }
   }
 
-  // The one auto-fixable doctor repair: append the successor wikilink to a
+  // The one auto-fixable doctor repair: append the successor id to a
   // predecessor's `superseded_by:`. Mutates only that node of the parsed YAML
   // document so untouched frontmatter keeps its original formatting (ndr:0134).
   // Idempotent — a link that is already present is left alone.
-  async repairBackPointer(predecessorPath: string, successorWikilink: string): Promise<void> {
+  async repairBackPointer(predecessorPath: string, successorId: string): Promise<void> {
     const file = path.join(this.ledger, predecessorPath);
     const raw = await fs.readFile(file, "utf8");
     const { yaml, body } = splitFrontmatter(raw);
     const { doc } = parseFrontmatterYaml(yaml);
-    appendToSequence(doc, "superseded_by", successorWikilink);
+    appendToSequence(doc, "superseded_by", successorId);
     await fs.writeFile(file, joinFrontmatter(doc.toString(), body), "utf8");
   }
 

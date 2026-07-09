@@ -15,9 +15,9 @@ export interface DoctorPort {
   // unreadable — the caller skips taxonomy checks rather than failing the sweep.
   readTaxonomy(): Promise<Taxonomy | null>;
 
-  // The one auto-fixable repair (curator contract): append a successor wikilink
+  // The one auto-fixable repair (curator contract): append a successor id
   // to a predecessor's `superseded_by:`. Touches only that field — untouched
   // frontmatter keeps its formatting (ndr:0134). Idempotent: appending a link
   // that is already present is a no-op write of the same content.
-  repairBackPointer(predecessorPath: string, successorWikilink: string): Promise<void>;
+  repairBackPointer(predecessorPath: string, successorId: string): Promise<void>;
 }
