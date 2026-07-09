@@ -48,7 +48,7 @@ function draftJson(fm: Record<string, unknown> = {}): string {
       author: "Jacob Hoehler",
       conviction: "tentative",
       project: "[[Auth]]",
-      labels: ["framework"],
+      labels: ["substrate"],
       supersedes: [],
       ...fm,
     },
@@ -779,6 +779,16 @@ describe("ndr init", () => {
     await fs.rm(tmp, { recursive: true, force: true });
   });
 
+  test("init scaffolds labels.yaml and a plain project name", async () => {
+    const result = await initCommand(tmp, { project: "myrepo" });
+    expect(result.exitCode).toBe(0);
+    const toml = await fs.readFile(path.join(tmp, ".ndr.toml"), "utf8");
+    expect(toml).toContain('project = "myrepo"');
+    expect(toml).not.toContain("[[");
+    expect(await fs.exists(path.join(tmp, "decisions", ".taxonomy", "labels.yaml"))).toBe(true);
+    expect(await fs.exists(path.join(tmp, "decisions", ".taxonomy", "areas.yaml"))).toBe(false);
+  });
+
   test("fresh init scaffolds .ndr.toml, ledger, taxonomy, and the grounding rule", async () => {
     const result = await initCommand(tmp);
     expect(result.exitCode).toBe(0);
@@ -786,15 +796,15 @@ describe("ndr init", () => {
 
     const toml = await fs.readFile(path.join(tmp, ".ndr.toml"), "utf8");
     expect(toml).toContain('ledger = "./decisions"');
-    expect(toml).toContain(`project = "[[${path.basename(tmp)}]]"`);
+    expect(toml).toContain(`project = "${path.basename(tmp)}"`);
+    expect(toml).not.toContain("[[");
 
-    const areas = await fs.readFile(path.join(tmp, "decisions", ".taxonomy", "areas.yaml"), "utf8");
-    expect(areas).toContain("- architecture");
-    const topics = await fs.readFile(
-      path.join(tmp, "decisions", ".taxonomy", "topics.yaml"),
+    const labels = await fs.readFile(
+      path.join(tmp, "decisions", ".taxonomy", "labels.yaml"),
       "utf8",
     );
-    expect(topics).toContain("- framework");
+    expect(labels).toContain("- architecture");
+    expect(labels).toContain("- write-side");
 
     const rule = await fs.readFile(path.join(tmp, ".claude", "rules", "ndr.md"), "utf8");
     expect(rule).toContain("# NDR coverage");
@@ -805,11 +815,6 @@ describe("ndr init", () => {
   test("capture works immediately after init via the .ndr.toml fallback", async () => {
     await initCommand(tmp);
     const fallback = path.join(tmp, "decisions");
-    // initCommand doesn't seed .taxonomy/labels.yaml yet (Task 9 territory) —
-    // seed it by hand so this test exercises the intended post-init capture
-    // flow instead of being blocked on unrelated, not-yet-landed work.
-    await fs.mkdir(path.join(fallback, ".taxonomy"), { recursive: true });
-    await fs.writeFile(path.join(fallback, ".taxonomy", "labels.yaml"), "- framework\n", "utf8");
     const capture = await captureCommand(draftJson(), undefined, fallback);
     expect(capture.exitCode).toBe(0);
     const parsed = JSON.parse(capture.stdout);
@@ -823,31 +828,35 @@ describe("ndr init", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).not.toContain("created");
     const skips = result.stdout.split("\n").filter((l) => l.startsWith("skipped"));
-    expect(skips.length).toBe(5); // .ndr.toml, decisions/, areas, topics, rules/ndr.md
+    expect(skips.length).toBe(4); // .ndr.toml, decisions/, labels, rules/ndr.md
   });
 
   test("--force rewrites .ndr.toml but never the taxonomy", async () => {
     await initCommand(tmp);
     await fs.writeFile(
-      path.join(tmp, "decisions", ".taxonomy", "areas.yaml"),
-      "- custom-area\n",
+      path.join(tmp, "decisions", ".taxonomy", "labels.yaml"),
+      "- custom-label\n",
       "utf8",
     );
     const result = await initCommand(tmp, { project: "renamed", force: true });
     expect(result.stdout).toContain("created  .ndr.toml");
     const toml = await fs.readFile(path.join(tmp, ".ndr.toml"), "utf8");
-    expect(toml).toContain('project = "[[renamed]]"');
-    const areas = await fs.readFile(path.join(tmp, "decisions", ".taxonomy", "areas.yaml"), "utf8");
-    expect(areas).toBe("- custom-area\n");
+    expect(toml).toContain('project = "renamed"');
+    expect(toml).not.toContain("[[");
+    const labels = await fs.readFile(
+      path.join(tmp, "decisions", ".taxonomy", "labels.yaml"),
+      "utf8",
+    );
+    expect(labels).toBe("- custom-label\n");
   });
 
   test("--ledger and --project overrides land in .ndr.toml", async () => {
-    const result = await initCommand(tmp, { ledger: "./docs/decisions", project: "[[custom]]" });
+    const result = await initCommand(tmp, { ledger: "./docs/decisions", project: "custom" });
     expect(result.exitCode).toBe(0);
     const toml = await fs.readFile(path.join(tmp, ".ndr.toml"), "utf8");
     expect(toml).toContain('ledger = "./docs/decisions"');
-    expect(toml).toContain('project = "[[custom]]"');
-    expect(await fs.exists(path.join(tmp, "docs", "decisions", ".taxonomy", "areas.yaml"))).toBe(
+    expect(toml).toContain('project = "custom"');
+    expect(await fs.exists(path.join(tmp, "docs", "decisions", ".taxonomy", "labels.yaml"))).toBe(
       true,
     );
   });
@@ -982,15 +991,10 @@ describe("ndr status", () => {
 
   test("a fresh init reports the configured ledger, counts, taxonomy, and grounding", async () => {
     await initCommand(tmp);
-    // initCommand doesn't seed .taxonomy/labels.yaml yet (Task 9 territory) —
-    // seed it by hand so the taxonomy count reflects real post-init wiring.
-    const taxonomyDir = path.join(tmp, "decisions", ".taxonomy");
-    await fs.mkdir(taxonomyDir, { recursive: true });
-    await fs.writeFile(path.join(taxonomyDir, "labels.yaml"), "- framework\n", "utf8");
     const out = JSON.parse((await statusCommand(tmp, { json: true })).stdout);
     expect(out.version).toBeString();
     expect(out.ledger.source).toContain(".ndr.toml");
-    expect(out.project).toBe(`[[${path.basename(tmp)}]]`);
+    expect(out.project).toBe(path.basename(tmp));
     expect(out.atoms).toEqual({ current: 0, total: 0 });
     expect(out.taxonomy.labels).toBeGreaterThan(0);
     expect(out.grounding.rule).toBe(true);

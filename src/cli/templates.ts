@@ -5,25 +5,19 @@
 // Generic starter taxonomy. Deliberately small — repo owners edit to taste,
 // and `ndr capture` hard-gates on these values (ndr:0153), so growing the
 // lists is an intentional act.
-export const AREAS_SEED = `# Areas — the "what is this decision about" axis.
+export const LABELS_SEED = `# Labels — what a decision is about. 1–4 per atom.
 # Finite list, hand-edited. \`ndr capture\` refuses unknown values.
 # To add: edit this file (friction is the feature — prevents drift).
-- architecture  # system shape, framework, runtime composition, DI
-- process       # how decisions get made / written / read
-- scope         # what's in vs out (MVP, pilot, team-product)
-- substrate     # storage and retrieval medium
-- tooling       # what we use to make / store / read them
-`;
-
-export const TOPICS_SEED = `# Topics — the "which slice of the area" axis.
-# Finite list, hand-edited. \`ndr capture\` refuses unknown values.
-# To add: edit this file (friction is the feature — prevents drift).
-- ci-strategy   # CI platform, gates, caching, trigger conventions
-- deployment    # how things ship / run / migrate
-- framework     # backend/frontend framework choice
-- read-side     # context-loading, retrieval, supersession resolution
-- repo-shape    # monorepo vs split, package layout
-- write-side    # capture, materialization, schema enforcement
+- architecture   # system shape, framework, runtime composition
+- process        # how decisions get made / written / read
+- scope          # what's in vs out
+- substrate      # storage and retrieval medium
+- tooling        # what we use to make / store / read things
+- ci-strategy    # CI platform, gates, caching
+- deployment     # how things ship / run / migrate
+- read-side      # context-loading, retrieval, supersession resolution
+- repo-shape     # monorepo vs split, package layout
+- write-side     # capture, materialization, schema enforcement
 `;
 
 export function ndrTomlTemplate(ledger: string, project: string): string {
@@ -66,17 +60,14 @@ canonical.
 ### Pointing at decisions from code
 
 Use \`ndr:\` references in code comments, commit messages, and PR
-descriptions. Three resolvable grains:
+descriptions. Two resolvable grains:
 
 - \`ndr:0042\` — frozen atom-id; "this code exists because of decision
-  0042" (historical anchor).
-- \`ndr:#auth-substrate\` — slug; follows supersession to the live atom.
-  Use when you mean "whatever decision currently governs auth substrate".
-- \`ndr:auth/substrate\` — \`area/topic\` pair; resolves to all current
-  atoms in that taxonomy slot. Use when the whole area governs the call
-  site.
+  0042" (historical anchor). Resolve walks to the current head.
+- \`ndr:<label>\` — taxonomy label; resolves to all current atoms
+  carrying that label. Use when the whole area governs the call site.
 
-The \`/decisions\` skill (and \`@ndr-reader\` agent) resolve all three.
+The \`/decisions\` skill (and \`@ndr-reader\` agent) resolve all grains.
 
 ### Capturing new decisions
 
