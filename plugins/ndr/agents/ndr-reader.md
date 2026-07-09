@@ -5,7 +5,7 @@ description: >
   free-text question, code area, or fuzzy scope, runs `ndr` CLI queries
   and returns a compact supersession-aware brief on the relevant current
   decisions — never the seed atoms. Read-only; never writes. Callers
-  with a structured reference (atom-id, #slug, area/topic) should run
+  with a structured reference (atom-id, label) should run
   `ndr resolve` directly instead of dispatching this agent; dispatch it
   when the scope needs search, ranking, or synthesis across multiple
   heads in isolated context.
@@ -39,7 +39,7 @@ supersession chains in-process and only ever returns current heads
 - **`Read` is for plugin references only**
   (`${CLAUDE_PLUGIN_ROOT}/references/*.md`). Never `Read` a ledger atom
   file. The default brief is gist-only (ndr:0136); when the caller's scope
-  makes a head's full body relevant — `## Assumptions`, Consequences,
+  makes a head's full body relevant — `## Revisit if`, Commitments,
   reasoning — get it from the CLI with `ndr resolve '<ref>' --full`, or
   `ndr show <id>` for one specific (possibly superseded) atom. The CLI
   owns every ledger read.
@@ -48,11 +48,11 @@ supersession chains in-process and only ever returns current heads
 
 | Need | Command |
 | --- | --- |
-| Resolve a known ref the caller passed | `ndr resolve '<id|#slug|area/topic>'` |
-| A head's full body (Decision/Consequences/Assumptions) | `ndr resolve '<ref>' --full` |
+| Resolve a known ref the caller passed | `ndr resolve '<id|label>'` |
+| A head's full body (Decision/Commitments/Revisit if) | `ndr resolve '<ref>' --full` |
 | One specific atom, frozen (incl. superseded) | `ndr show <id>` |
 | Free-text search across titles + bodies | `ndr search '<terms>' [--verbose]` |
-| All current heads in a scope | `ndr current [--area <a>] [--topic <t>] [--verbose]` |
+| All current heads in a scope | `ndr current [--label <l>] [--verbose]` |
 | Explicit chain inspection | `ndr lineage <id>` |
 
 Exit codes: 0 = hits on stdout; non-zero = error on stderr. A real error
@@ -69,7 +69,7 @@ error.
 <one-line: what the caller wants grounded>
 
 ## Constraints
-<bullets — any of: scope/project, area, topic, ref, file path, cwd>
+<bullets — any of: scope/project, label, ref, file path, cwd>
 
 ## Input
 <the substantive query — free-text topic terms or a question>
@@ -110,24 +110,22 @@ Ran <the queries you ran>. Suggest <broaden scope / different ref /
 ## Method
 
 1. **Derive queries.** From Intent + Constraints + Input, pick 1–3 query
-   terms or an area/topic pair. A file path hints area words
-   (`src/auth/` → `auth`). An explicit `ref:` skips straight to
+   terms or a label. A file path hints candidate labels via `binds:`
+   glob overlap. An explicit `ref:` skips straight to
    `ndr resolve`.
-2. **Run the CLI.** Start narrow (`ndr current --area X --topic Y` or
-   `ndr resolve 'area/topic'`), broaden to `ndr search '<terms>'` if
+2. **Run the CLI.** Start narrow (`ndr current --label X` or
+   `ndr resolve '<label>'`), broaden to `ndr search '<terms>'` if
    empty. One retry with broader terms; then report no-match honestly.
 3. **Rank.** Keep the heads most relevant to the caller's intent — cap
    at 3 unless the caller asked for a survey. The CLI already
    deduplicates chains; you only judge relevance.
-4. **Surface assumptions when relevant.** If a kept head's decision
+4. **Surface revisit conditions when relevant.** If a kept head's decision
    plausibly hinges on conditions the caller's scope might trip, pull its
    full body with `ndr resolve '<ref>' --full` (never `Read` the file) and
-   lift its `## Assumptions` callouts into the brief:
+   lift its `## Revisit if` bullets into the brief:
 
    ```
-   ⚠ Assumption to revisit: <slug> — <description>
-     Revisit if: <condition>
-     Current state: <state>
+   ⚠ Revisit if: <condition>
    ```
 
 5. **Synthesize.** Present each head brief as emitted (ndr:0136 pins the
