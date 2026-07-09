@@ -26,21 +26,21 @@ informed_by:
 
 The MVP includes a capture skill (`/capture-decision`). Pure hand-rolled markdown without skill support is not a valid test path.
 
+## Commitments
+
+- `/capture-decision` is in MVP scope.
+- Discipline-without-tooling is no longer a valid path for testing Q1.
+
+## Revisit if
+
+- Running the skill for several weeks shows the friction is still too high (refine the UX).
+- Running the skill for several weeks shows the tooling is unnecessary (drop tooling, run manual).
+
+## Context
+
+- Writing a structured decision artifact after every chat without skill support has too high an activation energy.
+- If the discipline lapses under that friction, the test fails to produce signal and Q1 stays unanswered.
+
 ## Why
 
-A capture skill is part of the test apparatus — without it, friction kills the discipline before it can produce signal.
-
-Writing a structured decision artifact after every chat without skill support has too high an activation energy. The discipline lapses, the test fails to produce signal, and Q1 stays unanswered. The skill is part of the test apparatus, not separate from it.
-
-## Assumptions
-
-`tooling-lowers-activation-energy`
-
-A capture skill reduces activation energy enough that the discipline sustains across sessions; pure hand-rolled markdown does not.
-
-- **Current state:** untested at MVP install time; the MVP itself is the test
-- **Revisit if:** running the skill for several weeks shows the friction is still too high (refine UX) or unnecessary (drop tooling, run manual)
-
-## Consequences
-
-`/capture-decision` is in MVP scope. Discipline-without-tooling is no longer a valid path for testing Q1.
+A capture skill is part of the test apparatus: without it, friction kills the discipline before it can produce signal.

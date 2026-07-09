@@ -25,12 +25,16 @@ informed_by:
 
 Q1 is answered by sustained use of the discipline on real decisions over time, not by reaching a build milestone. The MVP is the test environment, not the deliverable.
 
+## Commitments
+
+- The build is sized to whatever is needed to *run* the discipline, not to ship a product.
+- Future decisions about this project default to discipline-first sequencing.
+
+## Context
+
+- The underlying claim under test is that discipline reduces cross-session drift.
+- A build-shaped test would give a binary done/not-done answer without validating that claim.
+
 ## Why
 
-Only sustained use produces signal — the corpus has to be lived in.
-
-A build-shaped test gives a binary done/not-done answer that doesn't actually validate the underlying claim (discipline reduces cross-session drift). The hypothesis is about lived practice; the only way to measure that is to live it.
-
-## Consequences
-
-The build is sized to whatever is needed to *run* the discipline, not to ship a product. Future decisions about this project default to discipline-first sequencing.
+Only sustained use produces signal: the hypothesis is about lived practice, and the only way to measure lived practice is to live it. The corpus has to be lived in, not just built.

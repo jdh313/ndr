@@ -24,23 +24,23 @@ informed_by:
 
 ## Decision
 
-A `/decisions <topic>` skill plus an auto-loaded rule completes the write/read symmetry. Capture alone produces a corpus that no one reads — the read-side has to be in scope too.
+A `/decisions <topic>` skill plus an auto-loaded rule completes the write/read symmetry.
+
+## Commitments
+
+- Two skills, not one: `/capture-decision` and `/decisions`.
+- The supersession-walking primitive lives on the read side.
+- Tracked-project opt-in is a two-part mechanism: `.claude/CLAUDE.md` snippet (behavioral) + `.ndr.toml` at repo root (machine-readable marker the CLI consumes) — resolved via ndr:qevw6c (JUN-175).
+
+## Revisit if
+
+- More than one tracked project lands without a consistent opt-in shape.
+
+## Context
+
+- Capture alone produces a corpus that no one reads.
+- Capture without read is a one-way street: readers re-derive current state from older artifacts and silent drift begins.
 
 ## Why
 
-A written corpus without a surfaced reading path is the same failure mode as a stale ADR folder.
-
-The auto-loaded rule wires the read skill to fire (eventually, on tracked projects) without explicit invocation — so prior decisions enter context before new ones get proposed. Capture without read is a one-way street; readers re-derive current state from older artifacts and silent drift begins.
-
-## Assumptions
-
-`tracked-projects-opt-in`
-
-Tracked projects opt in via a project-level `.claude/CLAUDE.md` marker; specifics deferred to post-scaffold.
-
-- **Current state:** resolved by ndr:qevw6c (JUN-175) — two-part opt-in: `.claude/CLAUDE.md` snippet (behavioral) + `.ndr.toml` at repo root (machine-readable ledger marker the CLI consumes)
-- **Revisit if:** more than one tracked project lands without a consistent opt-in shape
-
-## Consequences
-
-Two skills, not one: `/capture-decision` and `/decisions`. The supersession-walking primitive lives on the read side.
+A written corpus without a surfaced reading path is the same failure mode as a stale ADR folder. The auto-loaded rule wires the read skill to fire (eventually, on tracked projects) without explicit invocation, so prior decisions enter context before new ones get proposed.

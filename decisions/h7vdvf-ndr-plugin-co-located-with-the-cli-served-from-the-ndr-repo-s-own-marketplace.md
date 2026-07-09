@@ -24,27 +24,29 @@ informed_by:
 
 The Claude Code plugin (skills `/decisions`, `/ground`, `/capture-decision`, `/drift-check` + agents) lives in `~/Projects/ndr/plugins/ndr`, served from that repo's single-plugin marketplace (`ndr@ndr`); the cc-marketplace copy is deprecated in place and is no longer the enabled source.
 
+## Commitments
+
+- Exactly one Claude Code plugin named `ndr` may be enabled at a time; if both are enabled simultaneously, `ndr@ndr` is the live source.
+- cc-marketplace's `ndr` entry stays frozen at v0.6.1, deprecated in place (banner + `[DEPRECATED]` descriptions) rather than deleted.
+- The single-plugin marketplace ships bare, with no automated validation or sync machinery — accepted for now given single-plugin scale.
+
+## Revisit if
+
+- The ndr repo is no longer checked out on the target machine — co-location's benefit depends on that.
+
+## Context
+
+- Post-JUN-175, every CLI surface change has a skill-side consumer: skills call `ndr resolve`, `ndr capture`, and `ndr search` directly.
+- Pre-JUN-175, the skill and CLI were loose peers — a CLI change could land without a corresponding skill update, without immediate breakage.
+- Keeping the plugin in a separate repo (cc-marketplace) means brief-format changes, exit codes, and stdout shape each require a coordinated two-repo commit.
+- JUN-176 (moving atoms into the ndr repo) was already moving in the same direction.
+- cc-marketplace's validation and sync automation exists for that marketplace but was deliberately not replicated here.
+
 ## Why
 
-After the JUN-175 rewire every CLI surface change has a skill-side consumer — co-location makes that co-evolution atomic.
-
-Pre-JUN-175, the skill and CLI were loose peers; a CLI change could land without a corresponding skill update without immediate breakage. Post-rewire, the skills call `ndr resolve`, `ndr capture`, and `ndr search` directly, so brief format changes, exit codes, and stdout shape all have skill-side consumers. Keeping the plugin in cc-marketplace means every such change requires a coordinated two-repo commit. Co-locating eliminates that sync step: one commit in `ndr/` covers the CLI change and its skill-side adaptation together.
-
-JUN-176 (atoms moving into the ndr repo) completes the same direction of travel. cc-marketplace's validation and sync automation was deliberately not replicated — the single-plugin marketplace ships bare because that machinery is only worth the overhead at scale.
-
-The cc-marketplace copy is deprecated in place (banner + `[DEPRECATED]` descriptions, version frozen at 0.6.1) rather than deleted, to preserve history and allow rollback without a force-push. Only one enabled plugin named `ndr` may exist at a time.
+Co-location makes CLI-skill co-evolution atomic: one commit in `ndr/` covers both the CLI change and its skill-side adaptation, eliminating the sync step a split-repo setup requires now that every CLI surface change has a skill-side consumer. The cc-marketplace copy is deprecated in place rather than deleted, preserving history and allowing rollback without a force-push. JUN-176 completes the same direction of travel. The single-plugin marketplace deliberately does not replicate cc-marketplace's validation/sync machinery — that overhead is only worth it at scale.
 
 ## Alternatives
 
-Stay in cc-marketplace relying on output contracts (ndr:0136, ndr:0146) to hold the seam (rejected — correct but loses atomic co-evolution) · move instead of copy (rejected — copy + deprecation preserves cc-marketplace history in place)
-
-- **Stay in cc-marketplace:** The ledgered output contracts make cross-repo coupling *safe* but don't make it *cheap*. Each CLI surface change still requires a second commit in a second repo. Acceptable at low churn; increasingly friction-heavy as the CLI stabilizes.
-- **Move (not copy):** A destructive move rewrites cc-marketplace history and leaves no paper trail of what the plugin looked like before the split. Copy + freeze + deprecation banner lets anyone reading cc-marketplace understand what happened without needing to chase commits.
-
-## Consequences
-
-Plugin and CLI changes are one commit · cc-marketplace carries a frozen, deprecated `ndr` entry at 0.6.1 · no validation/sync automation in the new marketplace
-
-- Co-location is only an improvement while the ndr repo is checked out on the target machine; see revisit trigger on portability.
-- The bare single-plugin marketplace has no automated validation. This is intentional for now — the overhead isn't justified for one plugin.
-- Exactly one Claude Code plugin named `ndr` should be enabled. If both are enabled simultaneously, the enabled source is ambiguous; the `ndr@ndr` entry should be the live one.
+- **Stay in cc-marketplace** — rejected: the existing output contracts (ndr:0136, ndr:0146) make the cross-repo coupling safe but not cheap; each CLI surface change still requires a second commit in a second repo.
+- **Move instead of copy** — rejected: a destructive move rewrites cc-marketplace history and leaves no paper trail of the plugin's prior state; copy + freeze + deprecation banner preserves that history in place.
