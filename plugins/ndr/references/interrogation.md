@@ -55,8 +55,8 @@ This is the move `worthiness.md` lacks entirely, and often the most decision-cha
 
 - Decisions are rarely symmetric. Ask: **if I'm wrong about the chosen path, how expensive is the recovery? If I'm wrong about rejecting the alternative, how expensive is that?**
 - Cheap-to-reverse-if-wrong beats expensive-to-reverse-if-wrong even at equal expected value. A reversible mistake is a smaller bet than an irreversible one of the same size.
-- This maps directly onto the atom's required `reversibility:` field — the asymmetry analysis *is* the justification for `easy` / `medium` / `hard`. Capture it so the field isn't a guess.
-- When the asymmetry is stark, name the escape valve: the specific, cheap action that undoes the decision if it's wrong (e.g. *"rename the directory to `tools/`"*). An escape valve turns a `hard` into a `medium`.
+- Where the recovery cost is asymmetric enough to bind future work, capture it as a `## Commitments` bullet noting the escape valve; the overall confidence in the call is the atom's `conviction:` rating.
+- When the asymmetry is stark, name the escape valve: the specific, cheap action that undoes the decision if it's wrong (e.g. *"rename the directory to `tools/`"*).
 
 **Tell that this move mattered:** the asymmetry sometimes flips the recommendation — the option with the worse expected value wins because being wrong about it is cheap.
 
@@ -64,7 +64,7 @@ This is the move `worthiness.md` lacks entirely, and often the most decision-cha
 
 A decision doesn't live alone. Two questions:
 
-- **Failure modes:** how does the chosen path break? What's the worst realistic outcome, and what's the early-warning sign? These become the atom's `## Assumptions` revisit triggers — the conditions under which the head should be re-examined.
+- **Failure modes:** how does the chosen path break? What's the worst realistic outcome, and what's the early-warning sign? These become the atom's `## Revisit if` conditions — the conditions under which the head should be re-examined.
 - **Composition:** what does this decision compose *with*? Does it constrain, enable, or quietly contradict an existing head? If it touches another atom's territory, that's a signal for the amend/merge routing in Move 7 — surface the related atom now, not at write time.
 
 Run an `ndr search` / `ndr current --area <area>` here to surface neighboring heads before judging composition. A candidate that contradicts a `current` head is a **supersession**, not a fresh capture — and that changes everything downstream.

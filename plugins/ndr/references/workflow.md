@@ -8,7 +8,7 @@ The shared substrate for both flows. Installed via `bun run install:bin` in `~/P
 
 | Verb | Job |
 | --- | --- |
-| `ndr resolve <ref> [--json]` | Resolve any reference grain (atom-id, `#slug`, `area/topic`) to current-head brief(s), with drift surfaced when the seed was superseded |
+| `ndr resolve <ref> [--json]` | Resolve any reference grain (atom-id, label) to current-head brief(s), with drift surfaced when the seed was superseded |
 | `ndr search <query> [--json]` | Free-text search across atom titles + bodies; returns current heads |
 | `ndr current [--area] [--topic] [--json]` | List current heads, optionally filtered; the count goes to stderr |
 | `ndr lineage <id> [--json]` | Walk a supersession chain explicitly |
@@ -16,7 +16,7 @@ The shared substrate for both flows. Installed via `bun run install:bin` in `~/P
 | `ndr doctor [--fix] [--json]` | Corpus health checks; exit 1 when findings present; `--fix` repairs missing back-links; `--json` for machine consumers |
 | `ndr init` | Scaffold a repo's opt-in (`.ndr.toml`, ledger, taxonomy, `.claude/rules/ndr.md`) |
 | `ndr status [--json]` | Report wiring: resolved ledger + source, atom counts, taxonomy, grounding marker |
-| `ndr areas` / `ndr topics` | List the resolved ledger's taxonomy axes |
+| `ndr labels` | List the resolved ledger's taxonomy labels |
 
 Every read verb takes `--json` for structured output — a complement to the pinned human brief (ndr:0136) so skills parse data instead of formatted text.
 
@@ -34,17 +34,17 @@ Every verb resolves its ledger the same way:
 
 ```toml
 ledger = "./decisions"     # required; relative paths resolve against this file's directory, ~/ expands
-project = "[[my-repo]]"    # optional; the project wikilink for atoms in this repo
+project = "my-repo"    # optional; plain-string project name for atoms in this repo
 ```
 
 A personal catch-all ledger is just a `.ndr.toml` higher up the walk (e.g. at `~`, pointing wherever that corpus lives). A present-but-broken `.ndr.toml` fails loudly rather than silently falling back.
 
 ### Output contracts
 
-- **Briefs (read verbs)** are pinned by ndr:0136: title + ledger-relative basename, area/topic/decision line, reversibility, body gist, `Lineage:` chain, `References:` block, and a `Drift:` line prepended when the seed was superseded. Skills present this output **verbatim** — never reconstruct it. Assumption callouts are deliberately omitted from CLI output; readers pull them from the **head** file when relevant.
-- **Capture results** are pinned by ndr:0146: exit 0 prints `{id, path, superseded, aliases_moved}` on stdout; exits 1/2/3 print a JSON error on stderr and never populate stdout. Consumers branch on the exit code before parsing.
+- **Briefs (read verbs)** are pinned by ndr:0136: title + ledger-relative basename, labels/decision line, conviction, body gist, `Lineage:` chain, `References:` block, and a `Drift:` line prepended when the seed was superseded. Skills present this output **verbatim** — never reconstruct it. The `## Revisit if` section is included in the head file readers pull; briefs stay terse.
+- **Capture results** are pinned by ndr:0146: exit 0 prints `{id, path, superseded, advisories}` on stdout; exits 1/2/3 print a JSON error on stderr and never populate stdout. Consumers branch on the exit code before parsing.
 - **Errors** (ndr:0154): corpus-wide verbs skip malformed atoms with a stderr warning — `ndr doctor` is the dedicated surface that reports them; targeted reads (`resolve <id>`) fail hard. A non-zero exit is surfaced to the user, never swallowed.
-- **Doctor reports** (ndr:0152): `ndr doctor --json` emits `{scanned_atoms, ledger, taxonomy_checked, issues{chain_integrity, status_coherence, alias_drift, taxonomy, missing_fields, frontmatter_body_drift, malformed}, repair_candidates, repairs_applied, summary}`. Exit codes: 0 healthy/repaired, 1 findings present, 3 repair write failure.
+- **Doctor reports** (ndr:0152): `ndr doctor --json` emits `{scanned_atoms, ledger, taxonomy_checked, issues{chain_integrity, status_coherence, taxonomy, binds_stale, context_section, missing_fields, frontmatter_body_drift, malformed}, repair_candidates, repairs_applied, summary}`. Exit codes: 0 healthy/repaired, 1 findings present, 3 repair write failure.
 
 ## Capture flow
 
@@ -57,32 +57,31 @@ in-skill scan ──► user confirms candidates ──► ndr-drafter ──►
 1. **Scan.** Skill scans the current conversation for atomic decisions. Atomic = one chosen path with one set of consequences. Bundled candidates (e.g. "use FastAPI + Postgres") get split. **For long sources** (pasted transcript, file, PR thread), the skill invokes the `ndr-extractor` subagent instead of scanning inline; the extractor returns structured candidates with supporting quotes.
 2. **Detect supersession intent.** The skill watches for revising signals — intent words ("revises", "supersedes", "instead of"), or a candidate that contradicts a decision named in chat / `informed_by:` context. Candidates with revising signal are tagged so Step 3 can ask the user what's being superseded.
 2.5. **Worthiness pass.** Atomicity (Step 1) checks shape; this checks grain. The three-question rubric in `references/worthiness.md` (named alternative? future-revisitable? rationale outlives the code site?) tags each candidate as `ndr-worthy`, `borderline`, or `not-ndr` with a suggested routing alternative (code comment, CLAUDE.md gotcha, rule file). This is a soft prompt surfaced to the user in Step 3, not a hard gate — the user always has the final say.
-3. **Confirm candidates.** Each candidate is presented as a one-line summary. User confirms titles, drops candidates, names predecessors for revising signals, routes any `borderline`/`not-ndr` tags, and (rarely) opts in to slug minting. Refusal-to-proceed is structural: if revising intent is present and the user neither names a predecessor nor confirms "this is fresh", the skill stops.
-4. **Taxonomy preflight.** Skill suggests `area:` / `topic:` per candidate from the on-disk taxonomy (`<ledger>/.taxonomy/{areas,topics}.yaml`). Unknown values trigger a "use existing or add new?" prompt; "add new" appends to the YAML file before drafting. `ndr capture` re-validates — this preflight is friendly UX, not the structural gate.
+3. **Confirm candidates.** Each candidate is presented as a one-line summary. User confirms titles, drops candidates, names predecessors for revising signals, and routes any `borderline`/`not-ndr` tags. Refusal-to-proceed is structural: if revising intent is present and the user neither names a predecessor nor confirms "this is fresh", the skill stops.
+4. **Labels preflight.** Skill suggests 1-4 `labels:` per candidate from `<ledger>/.taxonomy/labels.yaml`. Unknown values trigger a "use existing or add new?" prompt; "add new" appends to the YAML file before drafting. `ndr capture` re-validates — this preflight is friendly UX, not the structural gate.
 5. **Delegate composition.** Skill invokes the `ndr-drafter` subagent with confirmed candidates. The drafter returns `{frontmatter, body, missing_fields}` per atom. **The drafter never touches disk and never assigns IDs** — the body heading stays as `# PLACEHOLDER — <title>`. If `missing_fields` is non-empty, the skill prompts the user, fills the gap, and re-invokes the drafter. Drafts live in memory.
-6. **Review.** Skill invokes `ndr-reviewer` with `{mode: "pre-persist", drafts: [...]}`. The reviewer's load-bearing checks are atomicity (one chosen path, one set of consequences) and body altitude (heading + one-line gist + collapsed callouts, not free prose). It also runs soft mechanical checks (frontmatter completeness, taxonomy, status, alias namespace). Verdict is `pass` or `fail` with structured issues. Mechanical issues may be auto-fixed and re-reviewed; load-bearing failures route back to the drafter or to user edits.
+6. **Review.** Skill invokes `ndr-reviewer` with `{mode: "pre-persist", drafts: [...]}`. The reviewer's load-bearing checks are atomicity (one chosen path, one set of consequences) and body shape (fixed section order, single-altitude plain prose, no callouts). It also runs soft mechanical checks (frontmatter completeness, labels, status). Verdict is `pass` or `fail` with structured issues. Mechanical issues may be auto-fixed and re-reviewed; load-bearing failures route back to the drafter or to user edits.
 7. **Persist.** `ndr capture` is **single-atom** — the skill loops accepted drafts, piping each as JSON on stdin via quoted heredoc. The draft schema:
 
    ```json
    {
-     "frontmatter": { "title": "...", "status": "current", "decision_date": "...", "aliases": [], "project": "[[...]]", "derived_from": [], "informed_by": [], "supersedes": [], "superseded_by": [], "area": "...", "topic": "...", "impacts": [], "revisit_triggers": [], "reversibility": "...", "tags": ["decision"] },
-     "body": "\n# PLACEHOLDER — <title>\n\n## Decision\n..."
+     "frontmatter": { "title": "...", "status": "current", "decision_date": "...", "project": "...", "derived_from": [], "informed_by": [], "supersedes": [], "superseded_by": [], "conviction": "...", "labels": [], "binds": [] },
+     "body": "\n# PLACEHOLDER — <title>\n\n## Decision\n...\n\n## Scope\n...\n\n## Commitments\n...\n\n## Revisit if\n...\n\n## Context\n...\n\n## Why\n...\n\n## Alternatives\n..."
    }
    ```
 
    Optional top-level keys: `vault_decisions` (per-draft ledger override) and `supersedes` (overrides the frontmatter field). The CLI:
-   - Validates required fields, enums, and `area:`/`topic:` against the on-disk taxonomy (hard gate).
+   - Validates required fields, enums, and `labels:` against `labels.yaml` (hard gate).
    - Assigns a 6-char lowercase Crockford base32 id via CSPRNG (ndr:0144) and patches the `# PLACEHOLDER —` heading to `# <id> —`.
-   - Writes `<ledger>/<id>-<kebab-title>.md`. Always single-file — hybrid altitude callouts handle length-management inside the file.
-   - On non-empty `supersedes:`, performs three-write supersession (see below).
+   - Writes `<ledger>/<id>-<kebab-title>.md`. Always single-file — one altitude per section keeps length manageable inside the file.
+   - On non-empty `supersedes:`, performs two-write supersession (see below).
    - Exit codes: `0` success (result JSON on stdout), `1` validation, `2` supersession conflict, `3` mid-transaction half-state (errors on stderr).
-8. **Three-write supersession (with alias handover, ndr:0051).** When `supersedes: [X]` is non-empty, `ndr capture`:
+8. **Two-write supersession.** When `supersedes: [X]` is non-empty, `ndr capture`:
    - Writes the successor first.
-   - Patches each predecessor: `status: superseded`, appends the successor wikilink to `superseded_by: []`.
-   - **If the predecessor carries `aliases:`**, the patch also moves each slug: appends to the successor's `aliases:` (re-writing the successor file with merged aliases), then clears the predecessor's `aliases:` to `[]`. The slug handover is part of the same operation, not a separate user step.
+   - Patches each predecessor: `status: superseded`, appends the successor's plain id to `superseded_by: []`.
    - Refuses if the predecessor is already `superseded` by a *different* successor — exits `2` with a conflict report; manual resolution needed.
-   - On patch failure mid-transaction, reports the half-state (which slugs moved, which writes succeeded) and exits `3`. No silent partial writes.
-9. **Summarize.** Skill prints a compact summary to the main context: ids written, files patched (with status flips), and any alias handovers. One line per file.
+   - On patch failure mid-transaction, reports the half-state (which writes succeeded, which are pending) and exits `3`. No silent partial writes.
+9. **Summarize.** Skill prints a compact summary to the main context: ids written, files patched (with status flips), and any advisories. One line per file.
 
 ### Why this shape
 
@@ -102,19 +101,18 @@ The read side has two entry points, one CLI, and one synthesis worker:
 | `/ground [scope]` | active code work — cwd, file path, area phrase | Before substantive edits or before delegating to a coding subagent (junior-dev / senior-dev / tech-lead) — "ground me in the NDRs for this area" |
 | `@ndr-reader` | both skills, and any agent with Agent-tool access | Free-text/fuzzy scopes only: derives queries, runs the CLI, ranks, synthesizes across heads in isolated context. Read-only |
 
-**Structured references go straight to the CLI.** When the argument parses to an atom-id, `#slug`, or `area/topic`, the skill runs `ndr resolve` itself and presents the brief verbatim — one subprocess call replaces the old multi-hop agent inference (ndr:0129). `@ndr-reader` is dispatched only when the scope is fuzzy enough to need search, ranking, or cross-head synthesis.
+**Structured references go straight to the CLI.** When the argument parses to an atom-id or a label, the skill runs `ndr resolve` itself and presents the brief verbatim — one subprocess call replaces the old multi-hop agent inference (ndr:0129). `@ndr-reader` is dispatched only when the scope is fuzzy enough to need search, ranking, or cross-head synthesis.
 
 ### Resolution by grain
 
 `ndr resolve` dispatches on the reference shape:
 
 - **atom-id** (`0011` legacy 4-digit, or `k3m9xq` 6-char base32) — loads the atom, walks `superseded_by:` to the head, prints the head brief. If the seed was superseded, a `Drift: seed <id> superseded → head <id>` line is prepended — **this is what makes reading drift-safe.**
-- **slug** (`#monorepo-shape`) — finds the atom currently holding the alias; slugs track forward through supersession, so there is no drift to surface.
-- **topic** (`area/topic`) — lists all `status: current` heads in that pair; `--verbose` expands to full briefs.
+- **label** (`<label>`) — lists all `status: current` heads carrying that label; `--verbose` expands to full briefs.
 
-### Assumptions
+### Revisit conditions
 
-CLI briefs omit `## Assumptions` callouts (ndr:0136 — they belong to interactive reading). When a head's revisit conditions plausibly matter to the work at hand, the skill or reader `Read`s the **head** file (path from the brief's basename) and surfaces the callouts. Heads are safe to read directly — the chain has already been walked; it is *seed* atoms that must never be read as a shortcut.
+CLI briefs stay terse; the `## Revisit if` section lives in the head file as plain bullets — no callouts (ndr:0136 — they belong to interactive reading). When a head's revisit conditions plausibly matter to the work at hand, the skill or reader `Read`s the **head** file (path from the brief's basename) and surfaces them. Heads are safe to read directly — the chain has already been walked; it is *seed* atoms that must never be read as a shortcut.
 
 ### Fallbacks
 
@@ -169,8 +167,8 @@ scope + ledger resolution (skill) ──► @ndr-drift-auditor: ndr current --ve
 
 - The skill resolves the diff scope (never silently defaulted) and the ledger (`.ndr.toml` walk-up; error if none), and passes both to the agent.
 - The agent enumerates via `ndr current --verbose` — heads-only filtering and the supersession walk happen in-process; the agent never re-filters.
-- Full bodies (Decision / Consequences / `## Assumptions` callouts) come from `Read`ing head files — briefs carry only the gist (ndr:0136). Heads are safe to read; seeds are not.
-- The compare itself — does this diff violate a Decision, trip a `Revisit if:`, invalidate a Consequence — is LLM work and stays in the agent.
+- Full bodies (Decision / Scope / Commitments / `## Revisit if` conditions) come from `Read`ing head files — briefs carry only the gist (ndr:0136). Heads are safe to read; seeds are not.
+- The compare itself — does this diff violate a Decision, trip a `Revisit if:` condition, invalidate a Commitment — is LLM work and stays in the agent.
 - Output: per-atom divergences, three labeled resolutions each (amend / supersede / revert). Read-only; the human ratifies via `/capture-decision` or a code edit.
 
 ### Corpus health
@@ -179,7 +177,7 @@ scope + ledger resolution (skill) ──► @ndr-drift-auditor: ndr current --ve
 @ndr-curator: ndr doctor --json [--fix] ──► interpret findings ──► health report
 ```
 
-- Every check definition lives in the CLI: chain integrity, status coherence, alias drift, taxonomy, missing fields, frontmatter/body drift, malformed files. The agent never re-implements one.
+- Every check definition lives in the CLI: chain integrity, status coherence, taxonomy, binds stale, context section, missing fields, frontmatter/body drift, malformed files. The agent never re-implements one.
 - `--fix` repairs exactly one class — missing `superseded_by:` back-links — idempotently. Everything else is human work, and the report says which kind.
 - Malformed atoms are doctor's surface (ndr:0154): bulk-read verbs skip them to keep result sets usable; doctor reports them so nothing stays invisible.
 - The agent's value-add is interpretation: grouping by class, severity ranking (supersession-primitive damage first), concrete next actions.
@@ -190,29 +188,24 @@ Deterministic detection belongs in the CLI — typed, tested, one implementation
 
 ## Reference convention
 
-External code, READMEs, design docs, and vault notes that need to point at NDRs use the `ndr:` prefix with three resolvable grains:
+External code, READMEs, design docs, and vault notes that need to point at NDRs use the `ndr:` prefix with two resolvable grains:
 
 | Form | Example | Resolves to | Use when |
 | --- | --- | --- | --- |
 | **atom-id** | `ndr:0011`, `ndr:k3m9xq` | the exact atom, frozen | documenting why something was built (historical anchor) |
-| **slug** | `ndr:#monorepo-shape` | the atom currently aliased to this slug; follows supersession via `aliases:` field | current governance matters; you want the live atom, not the one that was current at write-time |
-| **topic** | `ndr:architecture/repo-shape` | all `status: current` atoms with that `area`/`topic` | the whole area governs the call site |
+| **label** | `ndr:monorepo-shape` | all `status: current` atoms carrying that label | current governance matters; you want the live atom(s), not the one that was current at write-time |
 
-All three grains resolve with `ndr resolve '<ref>'` (strip the `ndr:` prefix). Legacy 4-digit ids are frozen (ndr:0144); new atoms get 6-char base32 ids. Slugs are minted **lazily** — per atom, only when external reference is needed. Most atoms never carry one.
+Both grains resolve with `ndr resolve '<ref>'` (strip the `ndr:` prefix). Legacy 4-digit ids are frozen (ndr:0144); new atoms get 6-char base32 ids.
 
-### Inside the vault
+### Why two grains
 
-Vault wikilinks can use slugs directly: `[[ndr-monorepo-shape]]` resolves through Obsidian's native alias mechanism to whichever atom currently holds the alias. Supersession moves the alias atomically (see Capture flow step 8), so the wikilink target updates without the link itself changing.
-
-### Why three grains
-
-References are bi-temporal: a writer may mean "the atom that justified this code" (historical) or "the decision that currently governs this code" (live). Forcing one reference form to do both jobs is what makes `ADR-NNNN` style refs go stale on supersession. The three grains let the writer name intent at write-time, and `ndr resolve` resolves the appropriate atom(s) at read-time.
+References are bi-temporal: a writer may mean "the atom that justified this code" (historical) or "the decision that currently governs this code" (live). Forcing one reference form to do both jobs is what makes `ADR-NNNN` style refs go stale on supersession. The two grains let the writer name intent at write-time, and `ndr resolve` resolves the appropriate atom(s) at read-time.
 
 ## Opting a repo into NDR coverage
 
 NDR coverage is per-repo and opt-in, with two complementary artifacts:
 
-1. **`.ndr.toml` at the repo root** — the machine-readable marker. Pins the ledger (and optionally the project wikilink) so every `ndr` invocation from inside the repo resolves against the right corpus. This is what the CLI and skills consume.
+1. **`.ndr.toml` at the repo root** — the machine-readable marker. Pins the ledger (and optionally the project name) so every `ndr` invocation from inside the repo resolves against the right corpus. This is what the CLI and skills consume.
 2. **A grounding rule at `.claude/rules/ndr.md`** — the behavioral marker. Claude Code auto-loads it at session start (same priority as CLAUDE.md), telling the orchestrator to run `/ground` before substantive code work. This is what makes grounding *happen*; the TOML alone changes where queries land, not whether they fire. A standalone rule file (rather than a CLAUDE.md append) keeps idempotency a plain existence check and leaves the repo's main memory file untouched.
 
 `ndr init` scaffolds both, plus the ledger directory and a starter `.taxonomy/`:
@@ -227,7 +220,7 @@ It is idempotent — existing artifacts are skipped (`--force` rewrites `.ndr.to
 
 The grounding rule covers:
 
-- That decisions for this repo live as atoms with `project: [[<this-repo>]]`.
+- That decisions for this repo live as atoms with a plain `project: <this-repo>` value.
 - When to invoke `/ground` (substantive edits, before delegating to a coding subagent) and when to skip (typo fixes, comment-only).
 - Treating returned decision heads as ground truth — no re-deriving from READMEs / ADRs / code comments.
 - The `ndr:` reference convention for pointing at decisions from code.
