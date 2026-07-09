@@ -23,7 +23,7 @@ import {
   resolveLedger as resolveLedgerInfo,
   resolveLedgerPath,
 } from "./config.ts";
-import { AREAS_SEED, NDR_RULE, TOPICS_SEED, ndrTomlTemplate } from "./templates.ts";
+import { LABELS_SEED, NDR_RULE, ndrTomlTemplate } from "./templates.ts";
 import type {
   Atom,
   AtomDraft,
@@ -640,7 +640,7 @@ export async function initCommand(cwd: string, opts: InitOptions = {}): Promise<
   const root = path.resolve(cwd);
   const ledgerValue = opts.ledger ?? "./decisions";
   const projectName = opts.project ?? path.basename(root);
-  const project = projectName.startsWith("[[") ? projectName : `[[${projectName}]]`;
+  const project = projectName;
 
   // Mirror parseRepoConfig's path semantics: `~/` expands, relative paths
   // resolve against the config file's directory (the repo root here).
@@ -675,17 +675,12 @@ export async function initCommand(cwd: string, opts: InitOptions = {}): Promise<
     }
     const taxonomyDir = path.join(ledgerAbs, ".taxonomy");
     await fs.mkdir(taxonomyDir, { recursive: true });
-    for (const [basename, seed] of [
-      ["areas.yaml", AREAS_SEED],
-      ["topics.yaml", TOPICS_SEED],
-    ] as const) {
-      const target = path.join(taxonomyDir, basename);
-      if (await exists(target)) {
-        report("skipped", path.join(ledgerLabel, ".taxonomy", basename), "(exists)");
-      } else {
-        await fs.writeFile(target, seed, "utf8");
-        report("created", path.join(ledgerLabel, ".taxonomy", basename));
-      }
+    const labelsTarget = path.join(taxonomyDir, "labels.yaml");
+    if (await exists(labelsTarget)) {
+      report("skipped", path.join(ledgerLabel, ".taxonomy", "labels.yaml"), "(exists)");
+    } else {
+      await fs.writeFile(labelsTarget, LABELS_SEED, "utf8");
+      report("created", path.join(ledgerLabel, ".taxonomy", "labels.yaml"));
     }
 
     // 3. Grounding rule in .claude/rules/ndr.md. Claude Code auto-loads it at
