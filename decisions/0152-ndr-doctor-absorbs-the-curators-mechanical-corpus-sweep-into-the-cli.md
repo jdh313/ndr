@@ -24,32 +24,31 @@ informed_by:
 
 Corpus health checks move from the ndr-curator agent into a deterministic `ndr doctor [--ledger] [--fix] [--json]` command.
 
+## Scope
+
+- Binds: check classes covered by the sweep — bidirectional supersession integrity, dangling refs, status coherence, alias drift, taxonomy violations, missing required fields, id/title drift, and malformed-file findings.
+- Does not bind: the existing `ReadPort`/`WritePort` code paths, which stay unchanged behind the new `DoctorPort`.
+
+## Commitments
+
+- Exit code contract: 0 for healthy or repaired, 1 when findings are present, 3 on repair write failure; `--json` enables machine consumers, with a grouped human report as the default.
+- `--fix` mutates only the `superseded_by` node of the parsed YAML doc, deriving repair candidates from an existing schema-valid successor naming the predecessor (no status requirement on the successor); the rest of the file stays byte-stable.
+- Malformed atoms surface as findings, never as silent skips — a health checker must not hide sick atoms (deliberate contrast with the bulk-verb skip behavior in the bulk-read atom).
+- Until JUN-181 rewires `/drift-check`, `@ndr-drift-auditor`, and `@ndr-curator` onto `ndr doctor`, the agent keeps running as before.
+
+## Revisit if
+
+- The findings schema changes after JUN-181 lands and any consumer diverges from it.
+
+## Context
+
+- The curator agent re-derived check logic on every run, producing inconsistent findings and burning tokens on mechanical work.
+- Agent-run checks were slow, non-deterministic, and had no stable output contract for downstream skills.
+
 ## Why
 
-Agent-run checks are slow, token-costly, and non-deterministic; a CLI sweep is instant and scriptable.
-
-The curator agent re-derived check logic on every run, producing inconsistent findings and burning tokens on mechanical work. A deterministic CLI command runs in milliseconds, pipes cleanly to jq, and can be called from CI. Separating the check logic from its host also makes the surface testable in isolation: pure cross-atom checks live in `src/domain/doctor.ts` with no I/O; a `DoctorPort` (`scanLedger` / `readTaxonomy` / `repairBackPointer`) keeps that surface apart from the existing `ReadPort`/`WritePort`. The agent becomes a thin wrapper once JUN-181 rewires `/drift-check`, `@ndr-drift-auditor`, and `@ndr-curator` onto the command's output contract.
+A deterministic CLI sweep runs in milliseconds, pipes cleanly to jq, and can be called from CI — none of which the agent-run checks could offer. Separating the check logic from its host also makes the surface testable in isolation: pure cross-atom checks live in `src/domain/doctor.ts` with no I/O, and a `DoctorPort` (`scanLedger` / `readTaxonomy` / `repairBackPointer`) keeps that surface apart from the existing `ReadPort`/`WritePort`. The agent becomes a thin wrapper once JUN-181 rewires `/drift-check`, `@ndr-drift-auditor`, and `@ndr-curator` onto the command's output contract.
 
 ## Alternatives
 
-Keeping checks agent-side — rejected. Slow, token-costly, non-deterministic.
-
-The agent approach has no stable output contract for downstream skills, can't run in CI, and re-implements the same logic each invocation. The only upside (natural-language reporting) is preserved by routing agent output through `--json` findings.
-
-## Assumptions
-
-`doctor-output-contract-stable`
-
-JUN-181 wires three skills/agents onto the `ndr doctor --json` findings schema before the agent wrapper is removed.
-
-- **Current state:** active — JUN-181 landed 2026-06-05; schema now load-bearing for `/drift-check`, `@ndr-drift-auditor`, `@ndr-curator`
-- **Revisit if:** the findings schema changes after JUN-181 lands and any consumer diverges
-
-## Consequences
-
-Check classes: bidirectional supersession integrity, dangling refs, status coherence, alias drift, taxonomy violations, missing required fields, id/title drift, malformed-file findings · `--fix` repairs missing `superseded_by` back-links only, idempotently · exit 0 healthy/repaired, 1 findings present, 3 repair write failure · `--json` enables machine consumers; human grouped report by default
-
-- Malformed atoms are findings, not skips — a health checker must not silently skip sick atoms (deliberate contrast with bulk-verb skip behavior; see the bulk-read atom for that side of the split).
-- `--fix` mutates only the `superseded_by` node of the parsed YAML doc; repair candidates derive from an existing schema-valid successor naming the predecessor, with no status requirement on the successor. Byte-stable: no other whitespace or node is touched.
-- The `DoctorPort` surface is distinct from `ReadPort`/`WritePort`; existing read/write code paths are unchanged.
-- JUN-181 rewires `/drift-check`, `@ndr-drift-auditor`, and `@ndr-curator` to call `ndr doctor`; until then the agent runs as before.
+- **Keeping checks agent-side** — rejected: no stable output contract for downstream skills, can't run in CI, and re-implements the same logic on every invocation. The only upside (natural-language reporting) is preserved by routing agent output through `--json` findings.

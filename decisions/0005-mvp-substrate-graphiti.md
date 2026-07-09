@@ -20,38 +20,26 @@ informed_by:
   - "0004"
 ---
 
-## 0005 — Capture Skill Writes to Graphiti as Canonical Storage; Markdown Export as Periodic view
+# 0005 — Capture skill writes to Graphiti as canonical storage; markdown export as periodic view
 
-### Decision
+## Decision
 
 The MVP's canonical store is Graphiti; markdown is a periodic export for human-readable browsing. The capture skill writes to Graphiti directly.
 
-### Why
+## Revisit if
 
-At decision time, automatic cross-session entity disambiguation seemed worth the operational cost.
+- Personal decision corpus grows beyond ~500 atoms AND disambiguation drift becomes a felt problem.
 
-Markdown alone would re-derive "what we mean by X" every session, drifting silently — Graphiti's automatic disambiguation seemed worth the extra service. Markdown export keeps the corpus readable but is not canonical.
+## Context
 
-### Alternatives
+- Markdown alone would re-derive "what we mean by X" every session, drifting silently.
 
-Plain markdown in vault — rejected here, then resurrected as the choice in [[Decisions/0007-mvp-substrate-markdown]] once the apples-to-apples comparison shifted.
+## Why
 
-### Assumptions
+At decision time, automatic cross-session entity disambiguation seemed worth the operational cost: Graphiti's automatic disambiguation seemed worth the extra service. Markdown export keeps the corpus readable but is not canonical.
 
-`graphiti-disambiguation-load-bearing-at-personal-scale`
+Superseded 2026-05-14 (see [[Decisions/0007-mvp-substrate-markdown]]): an apples-to-apples comparison — tool-assisted markdown vs. tool-assisted Graphiti — shifted the call once co-locating decisions with the originating mulls was weighed in. Graphiti remains the fallback if cross-session disambiguation later becomes load-bearing.
 
-Automatic cross-session entity disambiguation is load-bearing even at ~50–200 decisions/year (personal scale).
+## Alternatives
 
-- **Current state:** rejected on 2026-05-14 — see 0007
-- **Revisit if:** personal decision corpus grows beyond ~500 atoms AND disambiguation drift becomes a felt problem
-
-### Status
-
-Superseded by [[Decisions/0007-mvp-substrate-markdown]] on 2026-05-14.
-
-The apples-to-apples comparison (tool-assisted markdown vs tool-assisted Graphiti) shifted the call: at personal scale the extra service isn't worth it, and co-locating decisions with the mulls that produced them is a real advantage. Graphiti remains the fallback if cross-session disambiguation later becomes load-bearing.
-
-```breadcrumbs
-flat: true
-```
-a
+- **Plain markdown in vault** — rejected (here): resurrected as the choice in [[Decisions/0007-mvp-substrate-markdown]] once the apples-to-apples comparison shifted.
