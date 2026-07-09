@@ -14,7 +14,7 @@ binds: []
 supersedes: []
 superseded_by: []
 derived_from:
-  - Decisions/0050-slugs-as-aliases-minted-lazily
+  - ndr:0050
 informed_by:
   - "0008"
 ---

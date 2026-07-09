@@ -10,7 +10,7 @@ The shared substrate for both flows. Installed via `bun run install:bin` in `~/P
 | --- | --- |
 | `ndr resolve <ref> [--json]` | Resolve any reference grain (atom-id, label) to current-head brief(s), with drift surfaced when the seed was superseded |
 | `ndr search <query> [--json]` | Free-text search across atom titles + bodies; returns current heads |
-| `ndr current [--area] [--topic] [--json]` | List current heads, optionally filtered; the count goes to stderr |
+| `ndr current [--label] [--json]` | List current heads, optionally filtered by label; the count goes to stderr |
 | `ndr lineage <id> [--json]` | Walk a supersession chain explicitly |
 | `ndr capture [file]` | Write path — single atom draft as JSON, from a file arg or stdin |
 | `ndr doctor [--fix] [--json]` | Corpus health checks; exit 1 when findings present; `--fix` repairs missing back-links; `--json` for machine consumers |
@@ -142,7 +142,7 @@ The two skills share the CLI and the reader but differ in who supplies the scope
 ### Skill responsibilities
 
 1. **Detect scope.** `pwd` / `git rev-parse --show-toplevel`, the repo's `.ndr.toml` `project` key if present, `$ARGUMENTS`, and recently-edited files in conversation context. Do NOT load atoms.
-2. **Query.** Structured signal → direct CLI call (`ndr resolve` / `ndr current --area --topic` / `ndr search`); fuzzy scope → dispatch `@ndr-reader` with the canonical Intent / Constraints / Input / Output-shape payload.
+2. **Query.** Structured signal → direct CLI call (`ndr resolve` / `ndr current --label` / `ndr search`); fuzzy scope → dispatch `@ndr-reader` with the canonical Intent / Constraints / Input / Output-shape payload.
 3. **Present.** Inline (1–2 heads) or batched table (3+). Surface assumption callouts from head files when the edit plausibly trips them — those are the load-bearing signal that prior reasoning may be tripping.
 4. **(Optional) Hand off.** If the orchestrator is about to dispatch `junior-dev` / `senior-dev` / `tech-lead`, append the `ndr:` reference strings from the brief to the delegation prompt so the subagent has stable identifiers without needing to query the ledger itself.
 
