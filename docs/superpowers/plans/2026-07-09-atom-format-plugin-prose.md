@@ -504,7 +504,7 @@ validation is the orchestrator's job (see the hard rules below).
         "derived_from": ["https://github.com/org/repo/pull/214"],
         "informed_by": []
       },
-      "body": "# PLACEHOLDER — Use FastAPI for the auth service\n\n## Decision\n\nUse FastAPI for the auth service.\n\n## Context\n\n- The service already runs Postgres via async SQLAlchemy.\n- The prior sync framework required an executor shim for async handlers.\n\n## Why\n\nFastAPI's first-class async support keeps handlers declarative without bolting an executor onto a sync framework. That was the deciding factor given the existing async ORM layer.\n\n## Commitments\n\n- Adds Pydantic v2 as a transitive dependency.\n- Pins uvicorn as the runtime.\n\n## Alternatives\n\n- **Flask + async shim** — verdict: rejected: executor bolt-on defeats the async ORM.\n",
+      "body": "# PLACEHOLDER — Use FastAPI for the auth service\n\n## Decision\n\nUse FastAPI for the auth service.\n\n## Commitments\n\n- Adds Pydantic v2 as a transitive dependency.\n- Pins uvicorn as the runtime.\n\n## Context\n\n- The service already runs Postgres via async SQLAlchemy.\n- The prior sync framework required an executor shim for async handlers.\n\n## Why\n\nFastAPI's first-class async support keeps handlers declarative without bolting an executor onto a sync framework. That was the deciding factor given the existing async ORM layer.\n\n## Alternatives\n\n- **Flask + async shim** — verdict: rejected: executor bolt-on defeats the async ORM.\n",
       "missing_fields": []
     }
   ]
