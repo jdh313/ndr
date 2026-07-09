@@ -1,9 +1,4 @@
-export {
-  FrontmatterSchema,
-  StatusSchema,
-  ReversibilitySchema,
-  type Frontmatter,
-} from "./schema.ts";
+export { FrontmatterSchema, StatusSchema, type Frontmatter } from "./schema.ts";
 export {
   asAtomId,
   extractAtomIdFromRef,
