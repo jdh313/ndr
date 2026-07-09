@@ -1,0 +1,14 @@
+# Labels — merged from areas.yaml + topics.yaml + corpus tags by `ndr migrate`.
+- discipline
+- granularity
+- meta-chain
+- mvp-scope
+- process
+- read-side
+- referencing
+- scope
+- substrate
+- supersession
+- test-method
+- tooling
+- write-side
