@@ -137,6 +137,60 @@ describe("ndr migrate", () => {
     const raw = await fs.readFile(path.join(ledgerDir, "0153-taxonomy-enforcement.md"), "utf8");
     expect(raw).toContain("area: architecture"); // untouched
     expect(JSON.parse(result.stdout).migrated).toBeGreaterThan(0);
+
+    expect(await exists(path.join(ledgerDir, ".taxonomy", "labels.yaml"))).toBe(false);
+    expect(await exists(path.join(ledgerDir, ".taxonomy", "areas.yaml"))).toBe(true);
+    expect(await exists(path.join(ledgerDir, ".taxonomy", "topics.yaml"))).toBe(true);
+  });
+
+  test("labels beyond the 4-label cap are reported as truncated", async () => {
+    const wideAtom = OLD_ATOM.replace(
+      "tags:\n- decision\n- meta-chain\n",
+      "tags:\n- decision\n- meta-chain\n- extra-one\n- extra-two\n",
+    );
+    await writeAtom(ledgerDir, "0153-taxonomy-enforcement.md", wideAtom);
+    await writeOldTaxonomy(ledgerDir);
+
+    const result = await migrateCommand(ledgerDir, repoRoot, { json: true });
+    const summary = JSON.parse(result.stdout);
+    expect(summary.labels_truncated).toEqual([
+      {
+        path: "0153-taxonomy-enforcement.md",
+        dropped: ["extra-two"],
+      },
+    ]);
+
+    const plainLedgerDir = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-migrate-"));
+    try {
+      await writeAtom(plainLedgerDir, "0153-taxonomy-enforcement.md", wideAtom);
+      await writeOldTaxonomy(plainLedgerDir);
+      const plain = await migrateCommand(plainLedgerDir, repoRoot, {});
+      expect(plain.stdout).toContain("1 atom(s) had labels truncated");
+    } finally {
+      await fs.rm(plainLedgerDir, { recursive: true, force: true });
+    }
+  });
+
+  test("an unreadable ledger directory returns exit 1 with a stderr message", async () => {
+    const missing = path.join(ledgerDir, "does-not-exist");
+    const result = await migrateCommand(missing, repoRoot, { json: true });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain(missing);
+  });
+
+  test("a per-file parse failure lands in failed while other atoms still migrate", async () => {
+    await writeAtom(ledgerDir, "0153-taxonomy-enforcement.md", OLD_ATOM);
+    await writeAtom(ledgerDir, "0154-malformed.md", "not frontmatter at all\n");
+    await writeOldTaxonomy(ledgerDir);
+
+    const result = await migrateCommand(ledgerDir, repoRoot, { json: true });
+    expect(result.exitCode).toBe(1);
+
+    const summary = JSON.parse(result.stdout);
+    expect(summary.migrated).toBe(1);
+    expect(summary.failed).toHaveLength(1);
+    expect(summary.failed[0].path).toBe("0154-malformed.md");
+    expect(summary.failed[0].reason).toContain("fence");
   });
 
   test("a new-format atom (no `area`) is skipped as already_migrated", async () => {

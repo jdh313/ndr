@@ -40,6 +40,7 @@ export async function migrateCommand(
   const migrated: string[] = [];
   const skipped: string[] = [];
   const failed: { path: string; reason: string }[] = [];
+  const labelsTruncated: { path: string; dropped: string[] }[] = [];
   const strayLabels = new Set<string>();
 
   for (const name of entries) {
@@ -62,7 +63,13 @@ export async function migrateCommand(
       continue;
     }
 
-    const next = convertFrontmatter(data, await firstCommitAuthor(repoRoot, ledger, name));
+    const { frontmatter: next, droppedLabels } = convertFrontmatter(
+      data,
+      await firstCommitAuthor(repoRoot, ledger, name),
+    );
+    if (droppedLabels.length > 0) {
+      labelsTruncated.push({ path: name, dropped: droppedLabels });
+    }
     for (const l of next.labels as string[]) strayLabels.add(l);
     const nextBody = flattenCallouts(body);
 
@@ -88,12 +95,16 @@ export async function migrateCommand(
     migrated: migrated.length,
     skipped: skipped.length,
     failed,
+    labels_truncated: labelsTruncated,
     dry_run: opts.dryRun === true,
   };
   const stdout =
     opts.json === true
       ? JSON.stringify(summary, null, 2) + "\n"
-      : `migrated ${migrated.length}, skipped ${skipped.length} (already new-format), failed ${failed.length}${opts.dryRun ? " [dry-run]" : ""}\n`;
+      : `migrated ${migrated.length}, skipped ${skipped.length} (already new-format), failed ${failed.length}${opts.dryRun ? " [dry-run]" : ""}\n` +
+        (labelsTruncated.length > 0
+          ? `${labelsTruncated.length} atom(s) had labels truncated\n`
+          : "");
   return { stdout, stderr: "", exitCode: failed.length > 0 ? 1 : 0 };
 }
 
@@ -103,7 +114,7 @@ export async function migrateCommand(
 function convertFrontmatter(
   data: Record<string, unknown>,
   author: string,
-): Record<string, unknown> {
+): { frontmatter: Record<string, unknown>; droppedLabels: string[] } {
   const asStringArray = (v: unknown): string[] =>
     Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
   const toIds = (v: unknown): string[] =>
@@ -119,20 +130,25 @@ function convertFrontmatter(
     ...asStringArray(data.tags).filter((t) => t !== "decision"),
   ];
 
+  const deduped = [...new Set(labels)];
+
   return {
-    id: data.id,
-    title: data.title,
-    status: data.status,
-    decision_date: data.decision_date,
-    author,
-    conviction: "tentative",
-    project: stripWikilink(data.project),
-    labels: [...new Set(labels)].slice(0, 4),
-    binds: [],
-    supersedes: toIds(data.supersedes),
-    superseded_by: toIds(data.superseded_by),
-    derived_from: asStringArray(data.derived_from).map(stripWikilink),
-    informed_by: toIds(data.informed_by),
+    frontmatter: {
+      id: data.id,
+      title: data.title,
+      status: data.status,
+      decision_date: data.decision_date,
+      author,
+      conviction: "tentative",
+      project: stripWikilink(data.project),
+      labels: deduped.slice(0, 4),
+      binds: [],
+      supersedes: toIds(data.supersedes),
+      superseded_by: toIds(data.superseded_by),
+      derived_from: asStringArray(data.derived_from).map(stripWikilink),
+      informed_by: toIds(data.informed_by),
+    },
+    droppedLabels: deduped.slice(4),
   };
 }
 
