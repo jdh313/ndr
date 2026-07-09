@@ -14,84 +14,10 @@ import {
 import { asAtomId } from "../../domain/atom.ts";
 import type { AtomDraft } from "../../domain/atom.ts";
 
-const FIXTURES_DIR = path.resolve(import.meta.dir, "../../../test/fixtures/ledger");
-
-describe("MarkdownLedgerAdapter against fixture ledger", () => {
-  const adapter = new MarkdownLedgerAdapter(FIXTURES_DIR);
-
-  test("getAtom returns typed Atom for a known id", async () => {
-    const atom = await adapter.getAtom(asAtomId("0049"));
-    expect(atom.frontmatter.id).toBe("0049");
-    expect(atom.frontmatter.area).toBe("tooling");
-    expect(atom.frontmatter.status).toBe("current");
-    expect(atom.body.length).toBeGreaterThan(0);
-  });
-
-  test("getAtom throws AtomNotFoundError for missing id", async () => {
-    await expect(adapter.getAtom(asAtomId("9999"))).rejects.toBeInstanceOf(AtomNotFoundError);
-  });
-
-  test("listCurrent with area+topic filter returns only matching current atoms", async () => {
-    const hits = await adapter.listCurrent({ area: "tooling", topic: "referencing" });
-    expect(hits.length).toBeGreaterThanOrEqual(1);
-    for (const a of hits) {
-      expect(a.frontmatter.area).toBe("tooling");
-      expect(a.frontmatter.topic).toBe("referencing");
-      expect(a.frontmatter.status).toBe("current");
-    }
-  });
-
-  test("listCurrent with area-only filter spans topics within the area", async () => {
-    const hits = await adapter.listCurrent({ area: "tooling" });
-    const topics = new Set(hits.map((a) => a.frontmatter.topic));
-    expect(topics.size).toBeGreaterThan(1);
-    for (const a of hits) {
-      expect(a.frontmatter.area).toBe("tooling");
-      expect(a.frontmatter.status).toBe("current");
-    }
-  });
-
-  test("listCurrent with no filter excludes superseded atoms and sorts by id", async () => {
-    const hits = await adapter.listCurrent();
-    expect(hits.every((a) => a.frontmatter.status === "current")).toBe(true);
-    // 0070 is superseded by 0102 in the fixture ledger.
-    expect(hits.map((a) => a.frontmatter.id)).not.toContain("0070");
-    const ids = hits.map((a) => a.frontmatter.id);
-    expect([...ids].sort()).toEqual(ids);
-  });
-
-  test("listCurrent with an unknown area returns empty", async () => {
-    const hits = await adapter.listCurrent({ area: "nonexistent" });
-    expect(hits).toEqual([]);
-  });
-
-  test("findBySlug resolves a minted alias to its atom (prefix-tolerant)", async () => {
-    const bare = await adapter.findBySlug("oxc-stack");
-    expect(bare?.frontmatter.id).toBe("0132");
-    expect(bare?.frontmatter.status).toBe("current");
-    // The stored `ndr-` prefix form resolves to the same atom.
-    const prefixed = await adapter.findBySlug("ndr-oxc-stack");
-    expect(prefixed?.frontmatter.id).toBe("0132");
-  });
-
-  test("findBySlug returns null for an unminted slug", async () => {
-    expect(await adapter.findBySlug("no-such-slug")).toBeNull();
-  });
-
-  test("searchFreeText finds matches in body/title", async () => {
-    const hits = await adapter.searchFreeText("supersession");
-    expect(hits.length).toBeGreaterThanOrEqual(1);
-  });
-
-  test("searchFreeText returns empty for a query with no matches", async () => {
-    const hits = await adapter.searchFreeText("zzz-no-match-zzz");
-    expect(hits).toEqual([]);
-  });
-});
-
-// Ported from scripts/test_persist.py, adapted for single-atom capture + base32
-// ids (ndr:0144). Every test builds a throwaway ledger with its own taxonomy —
-// the real vault is never touched.
+// Ported from scripts/test_persist.py, adapted for single-atom capture, base32
+// ids (ndr:0144), and the new-format frontmatter schema (Task 1). Every test
+// builds a throwaway ledger with its own taxonomy — the real vault ledger
+// (test/fixtures/ledger, still pre-migration format) is never touched here.
 const BASE32_ID = /^[0-9a-z]{6}$/;
 
 async function makeLedger(): Promise<string> {
@@ -106,35 +32,44 @@ async function makeLedger(): Promise<string> {
   return dir;
 }
 
-function makeDraft(fm: Record<string, unknown> = {}, body?: string): AtomDraft {
-  const title = (fm.title as string) ?? "Use FastAPI for auth";
+function draftFor(overrides: Record<string, unknown> = {}): AtomDraft {
+  const title = (overrides.title as string) ?? "t";
   return {
     frontmatter: {
       title,
       status: "current",
-      decision_date: "2026-05-15",
-      author: "test-author",
+      decision_date: "2026-07-08",
+      author: "Jacob Hoehler",
       conviction: "tentative",
+      project: "ndr",
       labels: ["write-side"],
-      binds: [],
-      aliases: [],
-      project: "[[Auth Rewrite]]",
-      derived_from: [],
-      informed_by: [],
       supersedes: [],
-      superseded_by: [],
-      tags: ["decision"],
-      ...fm,
+      ...overrides,
     },
-    body:
-      body ??
-      `\n# PLACEHOLDER — ${title}\n\n## Decision\n\n${title}.\n\n## Why\n\nAsync without rewriting the ORM.\n`,
+    body: `\n# PLACEHOLDER — ${title}\n\n## Decision\n\nOne sentence.\n\n## Context\n\n- A fact.\n\n## Why\n\nBecause.\n`,
   } as unknown as AtomDraft;
+}
+
+async function captureRaw(adapter: MarkdownLedgerAdapter, overrides: Record<string, unknown> = {}) {
+  return await adapter.captureAtom(draftFor(overrides));
+}
+
+async function capture(adapter: MarkdownLedgerAdapter, overrides: Record<string, unknown> = {}) {
+  const r = await captureRaw(adapter, overrides);
+  return { id: r.id };
 }
 
 async function seedAtom(
   dir: string,
-  opts: { id: string; title: string; status?: string; aliases?: string[]; supersededBy?: string[] },
+  opts: {
+    id: string;
+    title: string;
+    status?: string;
+    labels?: string[];
+    binds?: string[];
+    author?: string;
+    supersededBy?: string[];
+  },
 ): Promise<string> {
   const slug = opts.title
     .toLowerCase()
@@ -146,25 +81,17 @@ async function seedAtom(
     title: opts.title,
     status: opts.status ?? "current",
     decision_date: "2026-04-01",
-    author: "test-author",
+    author: opts.author ?? "test-author",
     conviction: "tentative",
-    labels: ["write-side"],
-    binds: [],
-    aliases: opts.aliases ?? [],
-    project: "[[Auth Rewrite]]",
-    derived_from: [],
-    informed_by: [],
+    project: "ndr",
+    labels: opts.labels ?? ["write-side"],
+    binds: opts.binds ?? [],
     supersedes: [],
     superseded_by: opts.supersededBy ?? [],
-    tags: ["decision"],
   };
   const yaml = Object.entries(fm)
     .map(([k, v]) =>
-      Array.isArray(v)
-        ? `${k}: [${v.map((x) => `"${x}"`).join(", ")}]`
-        : typeof v === "string" && (k === "id" || v.startsWith("[["))
-          ? `${k}: "${v}"`
-          : `${k}: ${v}`,
+      Array.isArray(v) ? `${k}: [${v.map((x) => `"${x}"`).join(", ")}]` : `${k}: "${v}"`,
     )
     .join("\n");
   await fs.writeFile(
@@ -174,6 +101,71 @@ async function seedAtom(
   );
   return filename;
 }
+
+describe("MarkdownLedgerAdapter reads", () => {
+  let tmp: string;
+  beforeEach(async () => {
+    tmp = await makeLedger();
+  });
+  afterEach(async () => {
+    await fs.rm(tmp, { recursive: true, force: true });
+  });
+
+  test("getAtom returns typed Atom for a known id", async () => {
+    await seedAtom(tmp, { id: "0049", title: "Some decision", labels: ["taxonomy"] });
+    const adapter = new MarkdownLedgerAdapter(tmp);
+    const atom = await adapter.getAtom(asAtomId("0049"));
+    expect(atom.frontmatter.id).toBe("0049");
+    expect(atom.frontmatter.labels).toEqual(["taxonomy"]);
+    expect(atom.frontmatter.status).toBe("current");
+    expect(atom.body.length).toBeGreaterThan(0);
+  });
+
+  test("getAtom throws AtomNotFoundError for missing id", async () => {
+    const adapter = new MarkdownLedgerAdapter(tmp);
+    await expect(adapter.getAtom(asAtomId("9999"))).rejects.toBeInstanceOf(AtomNotFoundError);
+  });
+
+  test("listCurrent with a label filter returns only matching current atoms", async () => {
+    await seedAtom(tmp, { id: "0001", title: "A write-side call", labels: ["write-side"] });
+    await seedAtom(tmp, { id: "0002", title: "A taxonomy call", labels: ["taxonomy"] });
+    const adapter = new MarkdownLedgerAdapter(tmp);
+    const hits = await adapter.listCurrent({ label: "write-side" });
+    expect(hits.map((a) => a.frontmatter.id)).toEqual(["0001"]);
+  });
+
+  test("listCurrent with no filter excludes superseded atoms and sorts by id", async () => {
+    await seedAtom(tmp, { id: "0002", title: "B" });
+    await seedAtom(tmp, { id: "0001", title: "A" });
+    await seedAtom(tmp, { id: "0003", title: "C", status: "superseded", supersededBy: ["0002"] });
+    const adapter = new MarkdownLedgerAdapter(tmp);
+    const hits = await adapter.listCurrent();
+    expect(hits.every((a) => a.frontmatter.status === "current")).toBe(true);
+    expect(hits.map((a) => a.frontmatter.id)).not.toContain("0003");
+    const ids = hits.map((a) => a.frontmatter.id);
+    expect([...ids].sort()).toEqual(ids);
+  });
+
+  test("listCurrent with an unknown label returns empty", async () => {
+    await seedAtom(tmp, { id: "0001", title: "A" });
+    const adapter = new MarkdownLedgerAdapter(tmp);
+    expect(await adapter.listCurrent({ label: "nonexistent" })).toEqual([]);
+  });
+
+  test("searchFreeText finds matches in body/title", async () => {
+    await seedAtom(tmp, { id: "0001", title: "Supersession chain" });
+    const adapter = new MarkdownLedgerAdapter(tmp);
+    const hits = await adapter.searchFreeText("supersession");
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("searchFreeText returns empty for a query with no matches", async () => {
+    await seedAtom(tmp, { id: "0001", title: "A" });
+    const adapter = new MarkdownLedgerAdapter(tmp);
+    const hits = await adapter.searchFreeText("zzz-no-match-zzz");
+    expect(hits).toEqual([]);
+  });
+});
 
 describe("MarkdownLedgerAdapter captureAtom — clean writes", () => {
   let tmp: string;
@@ -186,12 +178,12 @@ describe("MarkdownLedgerAdapter captureAtom — clean writes", () => {
 
   test("writes a fresh atom with a base32 id and patches the body placeholder", async () => {
     const adapter = new MarkdownLedgerAdapter(tmp);
-    const result = await adapter.captureAtom(makeDraft());
+    const result = await captureRaw(adapter, { title: "Use FastAPI for auth" });
 
     expect(result.id as string).toMatch(BASE32_ID);
     expect(result.path).toBe(`${result.id}-use-fastapi-for-auth.md`);
     expect(result.superseded).toEqual([]);
-    expect(result.aliases_moved).toEqual([]);
+    expect(result.advisories).toEqual([]);
 
     const roundTrip = await adapter.getAtom(asAtomId(result.id));
     expect(roundTrip.frontmatter.title).toBe("Use FastAPI for auth");
@@ -203,7 +195,7 @@ describe("MarkdownLedgerAdapter captureAtom — clean writes", () => {
     await seedAtom(tmp, { id: "0007", title: "Existing" });
     await seedAtom(tmp, { id: "k3m9xq", title: "Also existing" });
     const adapter = new MarkdownLedgerAdapter(tmp);
-    const result = await adapter.captureAtom(makeDraft({ title: "Next" }));
+    const result = await captureRaw(adapter, { title: "Next" });
     expect(result.id as string).toMatch(BASE32_ID);
     expect(result.id as string).not.toBe("k3m9xq");
   });
@@ -218,48 +210,50 @@ describe("MarkdownLedgerAdapter captureAtom — supersession", () => {
     await fs.rm(tmp, { recursive: true, force: true });
   });
 
-  test("supersession without aliases flips the predecessor and adds a back-link", async () => {
-    const predFile = await seedAtom(tmp, { id: "0001", title: "Use Flask for auth" });
+  test("supersession patches predecessor with plain-id back-link", async () => {
     const adapter = new MarkdownLedgerAdapter(tmp);
-    const result = await adapter.captureAtom(
-      makeDraft({ supersedes: [`[[Decisions/${predFile.replace(/\.md$/, "")}]]`] }),
-    );
-
-    expect(result.aliases_moved).toEqual([]);
-    expect(result.superseded.map((s) => s.id)).toEqual(["0001"]);
-
-    const pred = await adapter.getAtom(asAtomId("0001"));
-    expect(pred.frontmatter.status).toBe("superseded");
-    expect(pred.frontmatter.superseded_by).toContain(
-      `[[Decisions/${result.path.replace(/\.md$/, "")}]]`,
-    );
-    expect(pred.frontmatter.aliases).toEqual([]);
+    const pred = await capture(adapter, { title: "old call", labels: ["write-side"] });
+    const succ = await capture(adapter, {
+      title: "new call",
+      labels: ["write-side"],
+      supersedes: [pred.id],
+    });
+    const patched = await adapter.getAtom(pred.id);
+    expect(patched.frontmatter.status).toBe("superseded");
+    expect(patched.frontmatter.superseded_by).toEqual([succ.id]);
   });
 
-  test("supersession with alias handover moves the slug to the successor", async () => {
-    const predFile = await seedAtom(tmp, {
-      id: "0011",
-      title: "Monorepo symmetric apps",
-      aliases: ["ndr-monorepo-shape"],
-    });
+  test("binds narrowing emits an advisory, not an error", async () => {
     const adapter = new MarkdownLedgerAdapter(tmp);
-    const result = await adapter.captureAtom(
-      makeDraft({
-        title: "Split apps into services",
-        supersedes: [`[[Decisions/${predFile.replace(/\.md$/, "")}]]`],
-      }),
-    );
+    const pred = await capture(adapter, { title: "wide", binds: ["src/**", "plugins/**"] });
+    const result = await captureRaw(adapter, {
+      title: "narrow",
+      binds: ["src/**"],
+      supersedes: [pred.id],
+    });
+    expect(result.advisories.some((a) => a.includes("plugins/**"))).toBe(true);
+  });
 
-    expect(result.aliases_moved).toEqual([
-      { slug: "ndr-monorepo-shape", from: "0011", to: result.id },
-    ]);
+  test("cross-author supersession emits an advisory", async () => {
+    const adapter = new MarkdownLedgerAdapter(tmp);
+    const pred = await capture(adapter, { title: "theirs", author: "Nadia Petrova" });
+    const result = await captureRaw(adapter, {
+      title: "mine",
+      author: "Jacob Hoehler",
+      supersedes: [pred.id],
+    });
+    expect(result.advisories.some((a) => a.includes("Nadia Petrova"))).toBe(true);
+  });
 
-    const pred = await adapter.getAtom(asAtomId("0011"));
-    expect(pred.frontmatter.aliases).toEqual([]);
-    expect(pred.frontmatter.status).toBe("superseded");
-
-    const successor = await adapter.getAtom(asAtomId(result.id));
-    expect(successor.frontmatter.aliases).toContain("ndr-monorepo-shape");
+  test("same-author, superset-binds supersession emits no advisories", async () => {
+    const adapter = new MarkdownLedgerAdapter(tmp);
+    const pred = await capture(adapter, { title: "a", binds: ["src/**"] });
+    const result = await captureRaw(adapter, {
+      title: "b",
+      binds: ["src/**", "test/**"],
+      supersedes: [pred.id],
+    });
+    expect(result.advisories).toEqual([]);
   });
 
   test("refuses cleanly when a predecessor is already superseded by another atom", async () => {
@@ -267,14 +261,12 @@ describe("MarkdownLedgerAdapter captureAtom — supersession", () => {
       id: "0001",
       title: "Use Flask for auth",
       status: "superseded",
-      supersededBy: ["[[Decisions/0050-some-other-successor]]"],
+      supersededBy: ["0050"],
     });
     const adapter = new MarkdownLedgerAdapter(tmp);
-    await expect(
-      adapter.captureAtom(
-        makeDraft({ supersedes: [`[[Decisions/${predFile.replace(/\.md$/, "")}]]`] }),
-      ),
-    ).rejects.toBeInstanceOf(SupersessionConflictError);
+    await expect(captureRaw(adapter, { supersedes: ["0001"] })).rejects.toBeInstanceOf(
+      SupersessionConflictError,
+    );
 
     // Clean refusal — no orphan successor written (only the seeded predecessor remains).
     const mdFiles = (await fs.readdir(tmp)).filter((n) => n.endsWith(".md"));
@@ -283,9 +275,9 @@ describe("MarkdownLedgerAdapter captureAtom — supersession", () => {
 
   test("a dangling supersedes reference is a validation error, nothing written", async () => {
     const adapter = new MarkdownLedgerAdapter(tmp);
-    await expect(
-      adapter.captureAtom(makeDraft({ supersedes: ["[[Decisions/9999-does-not-exist]]"] })),
-    ).rejects.toBeInstanceOf(DraftValidationError);
+    await expect(captureRaw(adapter, { supersedes: ["9999"] })).rejects.toBeInstanceOf(
+      DraftValidationError,
+    );
     const mdFiles = (await fs.readdir(tmp)).filter((n) => n.endsWith(".md"));
     expect(mdFiles).toEqual([]);
   });
@@ -298,9 +290,7 @@ describe("MarkdownLedgerAdapter captureAtom — supersession", () => {
     const adapter = new MarkdownLedgerAdapter(tmp);
     let caught: unknown;
     try {
-      await adapter.captureAtom(
-        makeDraft({ supersedes: [`[[Decisions/${predFile.replace(/\.md$/, "")}]]`] }),
-      );
+      await captureRaw(adapter, { supersedes: ["0001"] });
     } catch (err) {
       caught = err;
     } finally {
@@ -328,39 +318,32 @@ describe("MarkdownLedgerAdapter captureAtom — validation", () => {
 
   test("a taxonomy violation blocks the write", async () => {
     const adapter = new MarkdownLedgerAdapter(tmp);
-    await expect(
-      adapter.captureAtom(makeDraft({ labels: ["not-a-real-label"] })),
-    ).rejects.toBeInstanceOf(DraftValidationError);
+    await expect(captureRaw(adapter, { labels: ["not-a-real-label"] })).rejects.toBeInstanceOf(
+      DraftValidationError,
+    );
     expect((await fs.readdir(tmp)).filter((n) => n.endsWith(".md"))).toEqual([]);
   });
 
   test("a missing required field blocks", async () => {
     const adapter = new MarkdownLedgerAdapter(tmp);
-    await expect(adapter.captureAtom(makeDraft({ project: undefined }))).rejects.toBeInstanceOf(
+    await expect(captureRaw(adapter, { project: undefined })).rejects.toBeInstanceOf(
       DraftValidationError,
     );
   });
 
   test("a missing supersedes field defaults to [] (capture-intent default)", async () => {
-    const draft = makeDraft();
-    delete (draft.frontmatter as Record<string, unknown>).supersedes;
     const adapter = new MarkdownLedgerAdapter(tmp);
+    const draft = draftFor();
+    delete (draft.frontmatter as Record<string, unknown>).supersedes;
     const result = await adapter.captureAtom(draft);
     expect(result.superseded).toEqual([]);
     const written = await fs.readFile(path.join(tmp, result.path), "utf8");
     expect(written).toContain("supersedes: []");
   });
 
-  test("an alias without the ndr- prefix blocks", async () => {
-    const adapter = new MarkdownLedgerAdapter(tmp);
-    await expect(
-      adapter.captureAtom(makeDraft({ aliases: ["monorepo-shape"] })),
-    ).rejects.toBeInstanceOf(DraftValidationError);
-  });
-
   test("an invalid status blocks", async () => {
     const adapter = new MarkdownLedgerAdapter(tmp);
-    await expect(adapter.captureAtom(makeDraft({ status: "draft" }))).rejects.toBeInstanceOf(
+    await expect(captureRaw(adapter, { status: "draft" })).rejects.toBeInstanceOf(
       DraftValidationError,
     );
   });
@@ -369,47 +352,10 @@ describe("MarkdownLedgerAdapter captureAtom — validation", () => {
     const bare = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-bare-"));
     try {
       const adapter = new MarkdownLedgerAdapter(bare);
-      await expect(adapter.captureAtom(makeDraft())).rejects.toBeInstanceOf(DraftValidationError);
+      await expect(captureRaw(adapter)).rejects.toBeInstanceOf(DraftValidationError);
     } finally {
       await fs.rm(bare, { recursive: true, force: true });
     }
-  });
-});
-
-describe("MarkdownLedgerAdapter captureAtom — slug uniqueness (ndr:0050)", () => {
-  let tmp: string;
-  beforeEach(async () => {
-    tmp = await makeLedger();
-  });
-  afterEach(async () => {
-    await fs.rm(tmp, { recursive: true, force: true });
-  });
-
-  test("a slug already held by another atom is refused", async () => {
-    await seedAtom(tmp, { id: "0011", title: "Monorepo", aliases: ["ndr-monorepo-shape"] });
-    const adapter = new MarkdownLedgerAdapter(tmp);
-    await expect(
-      adapter.captureAtom(makeDraft({ title: "Unrelated", aliases: ["ndr-monorepo-shape"] })),
-    ).rejects.toBeInstanceOf(DraftValidationError);
-  });
-
-  test("a slug vacated by a predecessor in the same capture is exempt", async () => {
-    const predFile = await seedAtom(tmp, {
-      id: "0011",
-      title: "Monorepo",
-      aliases: ["ndr-monorepo-shape"],
-    });
-    const adapter = new MarkdownLedgerAdapter(tmp);
-    const result = await adapter.captureAtom(
-      makeDraft({
-        title: "Split into services",
-        aliases: ["ndr-monorepo-shape"],
-        supersedes: [`[[Decisions/${predFile.replace(/\.md$/, "")}]]`],
-      }),
-    );
-    const successor = await adapter.getAtom(asAtomId(result.id));
-    // Slug survives exactly once on the successor after handover + dedupe.
-    expect(successor.frontmatter.aliases).toEqual(["ndr-monorepo-shape"]);
   });
 });
 
@@ -421,13 +367,13 @@ describe("MarkdownLedgerAdapter bulk-read tolerance", () => {
     // A valid current atom...
     await fs.writeFile(
       path.join(tmp, "0001-good.md"),
-      '---\nid: "0001"\ntitle: Good\nstatus: current\ndecision_date: 2026-01-01\nproject: "[[X]]"\nsupersedes: []\narea: tooling\ntopic: framework\nreversibility: easy\n---\nbody mentions widgets\n',
+      '---\nid: "0001"\ntitle: Good\nstatus: current\ndecision_date: 2026-01-01\nauthor: "Jacob Hoehler"\nconviction: tentative\nproject: "ndr"\nlabels: ["write-side"]\nsupersedes: []\n---\nbody mentions widgets\n',
       "utf8",
     );
     // ...alongside a genuinely-malformed one (invalid status enum).
     await fs.writeFile(
       path.join(tmp, "0002-bad.md"),
-      '---\nid: "0002"\ntitle: Bad\nstatus: bogus\ndecision_date: 2026-01-01\nproject: "[[X]]"\nsupersedes: []\narea: tooling\ntopic: framework\nreversibility: easy\n---\nbody\n',
+      '---\nid: "0002"\ntitle: Bad\nstatus: bogus\ndecision_date: 2026-01-01\nauthor: "Jacob Hoehler"\nconviction: tentative\nproject: "ndr"\nlabels: ["write-side"]\nsupersedes: []\n---\nbody\n',
       "utf8",
     );
   });
