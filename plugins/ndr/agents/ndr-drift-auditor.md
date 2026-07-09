@@ -16,7 +16,7 @@ tools:
 
 - **All ledger access goes through the `ndr` CLI** (ndr:0129). `ndr current --verbose` enumerates current heads — the CLI walks supersession chains in-process, so non-heads and retracted atoms never reach you. Never use `obsidian-cli`, MCP vault tools, `find`, or `grep` against the ledger.
 - If `ndr` is not on PATH (`command -v ndr` fails), emit `error: "ndr CLI not installed — run \`bun run install:bin\` in ~/Projects/ndr"` and stop. There is no fallback.
-- **Pull full bodies through the CLI, not by reading files.** The verbose brief carries only the gist; Decision/Consequences sections and `## Assumptions` callouts are withheld from the brief by design (ndr:0136). Get a head's complete body with `ndr resolve '<ref>' --full` (use the atom-id or basename from the brief); the never-`Read`-the-ledger rule holds for heads and seeds alike. (`ndr show <id>` is available for one specific atom frozen, but the drift audit always wants the current head — use `resolve --full`.)
+- **Pull full bodies through the CLI, not by reading files.** The verbose brief carries only the gist; Decision/Commitments sections and `## Revisit if` bullets are withheld from the brief by design (ndr:0136). Get a head's complete body with `ndr resolve '<ref>' --full` (use the atom-id or basename from the brief); the never-`Read`-the-ledger rule holds for heads and seeds alike. (`ndr show <id>` is available for one specific atom frozen, but the drift audit always wants the current head — use `resolve --full`.)
 - `ndr current` skips malformed atoms with a stderr warning (ndr:0154). Count the warnings for the report, but do not treat them as drift — malformed files are `ndr doctor`'s surface, reported by `ndr-curator`.
 - `Grep`/`Glob`/`Read` against the **repo** (not the ledger) are unrestricted — that is the code side of the audit.
 
@@ -34,7 +34,7 @@ Audit code-vs-decision drift. You enumerate the current decision heads via the `
     "ref": "<branch ref or commit range; ignored for working_tree and full_repo>"
   },
   "repo_path": ".",
-  "area_filter": null
+  "label_filter": null
 }
 ```
 
@@ -57,24 +57,46 @@ Audit code-vs-decision drift. You enumerate the current decision heads via the `
 
    Always disable paging and color (`--no-pager` / `--color never`) and use git-format diffs from jj (`--git`) — raw `jj diff` output is ANSI-colored and unanalyzable.
 
-   For `full_repo`: do NOT load every tracked file. Instead, treat the audit as "all heads vs current HEAD" — read atoms, and for each atom's named files/modules, check current `HEAD` state via `Read` and `Grep`. Diff-style evidence is replaced by "current code at `<path>:<lines>`".
+   For `full_repo`: do NOT load every tracked file. Instead, treat the audit as "all heads vs current HEAD".
+
+   Across all four scopes — not just `full_repo` — rank candidate atoms for the diff by
+   `binds:` overlap; this is how candidate heads are selected everywhere. For each current
+   head, test its `binds:` glob patterns against the changed file set (working tree, branch
+   range, commit range, or full repo). An atom whose globs match one or more changed files is a candidate,
+   ranked by match count. Atoms with empty `binds:` are lower-priority candidates,
+   included only when the diff touches an area their Decision/Commitments text names.
+
+   For each candidate atom, check current `HEAD` state via `Read` and `Grep`. Diff-style evidence is replaced by "current code at `<path>:<lines>`".
 
    If the resulting diff is empty (any scope), return early with `divergences: []` and `summary: "diff is empty in scope <kind>; nothing to audit."`.
 
-3. **Enumerate heads.** `ndr current --ledger <ledger> --verbose`, adding `--area <area_filter>` when the caller set one. Each brief is a head: title + ledger-relative basename on the first line, `area:`/`topic:`/`decision:` line, reversibility, body gist, `Lineage:`, `References:`. Heads-only filtering, supersession walking, and dedup already happened in-process — do not re-filter. Tally stderr `skipping malformed atom` warnings as `malformed_skipped`.
+3. **Enumerate heads.** `ndr current --ledger <ledger> --verbose`, adding `--label <label_filter>` when the caller set one. Each brief is a head: title + ledger-relative basename on the first line, `labels:`/`decision:` line, conviction, body gist, `Lineage:`, `References:`. Heads-only filtering, supersession walking, and dedup already happened in-process — do not re-filter. Tally stderr `skipping malformed atom` warnings as `malformed_skipped`.
 
 4. **Load head bodies.** For each brief, `ndr resolve <atom-id> --ledger <ledger> --full` (the atom-id is the first field of the brief / basename) and extract:
    - `title:` and atom path
    - **Decision section** body (the affirmative statement; usually under `## Decision`)
-   - **Consequences section** body (the deliberately accepted constraints; usually under `## Consequences`)
-   - **Assumptions callouts** in the body — `> [!warning]- <slug>` blocks contain `**Revisit if:**` lines naming the conditions the atom expected might invalidate it
+   - **Commitments section** body (obligations the decision creates; usually under `## Commitments`)
+   - **`## Revisit if` bullets** in the body, each a flip condition naming what might invalidate the atom
 
 5. **Per-atom audit.** Compare each head against the diff:
    - Does any change in the diff appear to **violate the Decision** — file paths, modules, library names, schema shapes, or API surfaces named in the atom?
    - Does any change appear to **trip a `Revisit if:` condition**?
-   - Does any change **invalidate a Consequence** the atom relied on?
+   - Does any change **invalidate a Commitment** the atom relied on?
 
    If none of the three trigger: not in drift. Skip.
+
+   Classify each candidate hit before recording it:
+
+   - **contradiction** — the current code actively conflicts with the atom's Decision
+     or a Commitment (the code does X; the decision says not-X). This is drift; record
+     it in `divergences`.
+   - **absence** — the atom decided something not yet built; the governed code simply
+     does not exist yet. This is a normal state ("decided, not yet built"), NOT drift.
+     Do NOT record absence in `divergences`. No ledger field tracks build state; work
+     tracking belongs in the ticket system.
+
+   This step filters absence out before assembling `divergences` — an absent-code
+   atom produces no finding at all, not a low-severity one.
 
 6. **For each detected divergence, draft three resolutions.**
    - **Amend** — what would change in the atom's framing if the diff is correct and the atom's framing was incomplete or outdated. (In ndr semantics, "amend" lands as a successor atom with `supersedes: [<this atom>]` whose framing is narrower or updated.)
@@ -97,6 +119,7 @@ Audit code-vs-decision drift. You enumerate the current decision heads via the `
     {
       "atom": "0042-use-fastapi-for-auth.md",
       "atom_title": "Use FastAPI for the auth service",
+      "kind": "contradiction",
       "at_risk_clause": "All token verification flows through `auth/verify.py`.",
       "evidence": [
         {
@@ -124,7 +147,7 @@ If no divergences: `divergences: []` and summary reads `"<N> heads audited; no d
 - **Mutate atoms or code.** All resolutions are proposals. The orchestrator surfaces them; the human ratifies.
 - **Re-implement the supersession walk.** `ndr current` returns heads only; trust it. Never enumerate ledger files yourself to "double-check".
 - **Check style or lint drift.** That's not the decision-atom layer.
-- **Surface corpus-health issues** (orphan back-pointers, alias conflicts, taxonomy violations, malformed files). That's `ndr doctor`'s scope, reported via `ndr-curator`.
+- **Surface corpus-health issues** (orphan back-pointers, label violations, malformed files). That's `ndr doctor`'s scope, reported via `ndr-curator`.
 - **Invent new atoms.** If the diff suggests an unrecorded decision should land, note it loosely in `summary` (e.g. `"consider whether the new caching layer needs an atom"`); do not fabricate one.
 
 ## Style
