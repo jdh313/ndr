@@ -11,7 +11,7 @@ This doc is the **fast, soft** layer. For a candidate consequential enough to ea
 A candidate is NDR-worthy when **all three** are yes:
 
 1. **Named alternative?** Is there a chosen path with an alternative anyone could plausibly have picked? Without an alternative, it's convention or assumption, not a decision.
-2. **Future-revisitable?** Could future-you or a future agent plausibly want to revisit or override this? The required `reversibility:` field and the `supersedes:` primitive imply the capture target is something the system might re-decide.
+2. **Future-revisitable?** Could future-you or a future agent plausibly want to revisit or override this? The required `conviction:` field and the `supersedes:` primitive imply the capture target is something the system might re-decide — and where the recovery cost is asymmetric, a `## Commitments` bullet records it.
 3. **Rationale outlives the code site?** If the WHY rots when the function is rewritten, it's a code comment. If it survives code churn, it's NDR-shaped.
 
 ## Negative test
@@ -57,7 +57,7 @@ Walking the rubric against real personal atoms.
 ### Clean pass — `ndr:0061` (Proactive vault context at session start)
 
 - **Named alternative?** Yes — SessionStart hook was the rejected path. The rationale spells out hook latency, iteration cost, no graceful degradation.
-- **Future-revisitable?** Yes — `revisit_triggers:` explicitly include "rule compliance is poor" and "a SessionStart hook becomes viable." Reversibility `easy`.
+- **Future-revisitable?** Yes — the `## Revisit if` section explicitly includes "rule compliance is poor" and "a SessionStart hook becomes viable." Conviction `arbitrary`.
 - **Rationale outlives the rule file?** Yes — the "rule vs hook" tradeoff applies to any future iteration of session-start automation, not just this one rule.
 
 Routing complement: the CLAUDE.md skip-condition list (`05-vault-session-start.md`) implements the rule and references the WHY only obliquely; that's correct — rules carry behavior, NDR carries rationale.
@@ -65,13 +65,13 @@ Routing complement: the CLAUDE.md skip-condition list (`05-vault-session-start.m
 ### Clean pass — `ndr:0058` (Keep swamp as a subdirectory inside homelab)
 
 - **Named alternative?** Yes, three of them — separate top-level repo, jj/git submodule, scatter at homelab root. Each rejection has its own reasoning.
-- **Future-revisitable?** Yes — `revisit_triggers:` cover publishing-as-template, CI divergence, navigability decay (with the explicit "rename to `tools/`" escape valve).
+- **Future-revisitable?** Yes — the `## Revisit if` section covers publishing-as-template, CI divergence, navigability decay (with the explicit "rename to `tools/`" escape valve).
 - **Rationale outlives the directory layout?** Yes — the atomic-commits-across-trees argument applies even if the structure later moves under a `tools/` umbrella.
 
 ### Clean pass via supersession — `ndr:0102` (Markdown remains canonical; swamp migration paused)
 
 - **Named alternative?** Yes — three rejected paths (execute as planned, pause-atom without superseding, drop-and-revert).
-- **Future-revisitable?** Yes — load-bearing `## Assumptions` (`obsidian-cli-plus-mcp-sufficient`, `no-concrete-pain-yet`) with explicit "revisit if" conditions.
+- **Future-revisitable?** Yes — load-bearing `## Revisit if` conditions (`obsidian-cli-plus-mcp-sufficient`, `no-concrete-pain-yet`) with explicit "revisit if" conditions.
 - **Rationale outlives the code site?** Yes — this is a substrate decision; rationale ("99 atoms with no friction", "Logseq DB-migration cautionary tale") is durational.
 
 Why this atom is the canonical example of supersession-driven worthiness: 0102 doesn't add a feature, it flips the head because assumptions behind 0070 weakened. The whole reason supersession exists is to record that flip without rewriting history. If the rule was "only capture forward progress," 0102 would be skipped — and the chain head would lie about how the system actually operates.
@@ -79,7 +79,7 @@ Why this atom is the canonical example of supersession-driven worthiness: 0102 d
 ### Close-call pass with routing complement — `ndr:0057` (Stacked-files Jellyfin convention)
 
 - **Named alternative?** Yes — single-MKV merge (deferred), per-disc subfolders (rejected), Music Videos collection (rejected).
-- **Future-revisitable?** Yes — `revisit_triggers:` cover per-movie merge upgrades and Jellyfin convention changes.
+- **Future-revisitable?** Yes — the `## Revisit if` section covers per-movie merge upgrades and Jellyfin convention changes.
 - **Rationale outlives the code site?** Mostly — the WHY is partly Jellyfin's documented behavior (which lives in Jellyfin's docs), but the *chosen path among Jellyfin's recognized patterns* is the user's call, and the validated-experiment evidence ("Bruce Springsteen Live in Barcelona, 6 duplicates → 0") is durational.
 
 **Routing complement:** this atom benefits from a homelab CLAUDE.md entry that says "media goes in stacked-files layout (`ndr:0057`)" — without it, the convention enforcement lives only in the audit method. The NDR is the WHY, the CLAUDE.md entry is the enforcement, the `swamp model jellyfin audit` is the verification. Three-layer pattern.
