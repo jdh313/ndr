@@ -21,7 +21,7 @@ import {
 } from "../../domain/index.ts";
 import type { DoctorPort } from "../../ports/doctor.ts";
 import type { CurrentFilter, ReadPort } from "../../ports/read.ts";
-import type { AliasMove, CaptureResult, SupersededRecord, WritePort } from "../../ports/write.ts";
+import type { CaptureResult, SupersededRecord, WritePort } from "../../ports/write.ts";
 import { joinFrontmatter, splitFrontmatter } from "./fence.ts";
 import { appendToSequence, parseFrontmatterYaml, stringifyFrontmatter } from "./yaml.ts";
 
@@ -45,9 +45,9 @@ export class AtomNotFoundError extends Error {
   }
 }
 
-// Capture rejected before any write — required fields, enums, taxonomy, alias
-// prefix, slug uniqueness, or a dangling/unreadable supersedes reference. Maps
-// to CLI exit code 1.
+// Capture rejected before any write — required fields, enums, taxonomy, binds
+// glob syntax, or a dangling/unreadable supersedes reference. Maps to CLI exit
+// code 1.
 export class DraftValidationError extends Error {
   readonly messages: readonly string[];
 
@@ -71,7 +71,6 @@ export class SupersessionConflictError extends Error {
 export interface HalfState {
   readonly successor_written: string;
   readonly superseded_so_far: readonly SupersededRecord[];
-  readonly aliases_moved_so_far: readonly AliasMove[];
   readonly failed_predecessor: string;
 }
 
@@ -96,7 +95,6 @@ export class HalfStateError extends Error {
 interface PredecessorState {
   readonly id: string;
   readonly filename: string;
-  readonly aliases: readonly string[];
   readonly data: Record<string, unknown>;
   readonly body: string;
 }
@@ -144,22 +142,9 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort, DoctorPort {
       const atom = await this.getAtom(cursor);
       chain.push(atom);
       const next = atom.frontmatter.superseded_by[0];
-      cursor = next ? extractAtomIdFromWikilink(next) : null;
+      cursor = next ? extractAtomIdFromRef(next) : null;
     }
     return chain;
-  }
-
-  async findBySlug(slug: string): Promise<Atom | null> {
-    const target = normalizeSlug(slug);
-    const atoms = await this.readAllAtoms();
-    const match =
-      atoms.find((a) => a.frontmatter.status === "current" && hasAlias(a, target)) ??
-      atoms.find((a) => hasAlias(a, target));
-    if (match === undefined) return null;
-    // Walk to the head so a slug always resolves current, even if a ledger
-    // bug left the alias on a superseded atom instead of its successor.
-    const chain = await this.walkLineage(asAtomId(match.frontmatter.id));
-    return chain[chain.length - 1]!;
   }
 
   async listCurrent(filter: CurrentFilter = {}): Promise<Atom[]> {
@@ -168,8 +153,7 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort, DoctorPort {
       .filter(
         (a) =>
           a.frontmatter.status === "current" &&
-          (filter.area === undefined || a.frontmatter.area === filter.area) &&
-          (filter.topic === undefined || a.frontmatter.topic === filter.topic),
+          (filter.label === undefined || a.frontmatter.labels.includes(filter.label)),
       )
       .sort((a, b) => a.frontmatter.id.localeCompare(b.frontmatter.id));
   }
@@ -199,52 +183,59 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort, DoctorPort {
     //    orphan successor — only genuine mid-write failures leave a half-state.
     const predecessors = await this.preflightSupersession(parsed.supersedes);
 
-    // 4. Slug uniqueness across the corpus (ndr:0050), exempting any slug a
-    //    predecessor in this same capture is about to vacate (ndr:0051).
-    const predecessorIds = predecessors.map((p) => p.id);
-    await this.assertSlugsUnique(parsed.aliases, predecessorIds);
+    // 4. Advisories: non-blocking warnings composed before the write so both
+    //    kinds land in the same result (binds narrowing, cross-author
+    //    supersession). Exit code stays 0 — these are prompts, not gates.
+    const advisories: string[] = [];
+    for (const pred of predecessors) {
+      const predBinds = Array.isArray(pred.data.binds)
+        ? pred.data.binds.filter((b): b is string => typeof b === "string")
+        : [];
+      const uncovered = predBinds.filter((b) => !parsed.binds.includes(b));
+      if (uncovered.length > 0) {
+        advisories.push(
+          `successor narrows predecessor ${pred.id}'s binding: [${uncovered.join(", ")}] — intentional?`,
+        );
+      }
+      const predAuthor = typeof pred.data.author === "string" ? pred.data.author : null;
+      if (predAuthor !== null && predAuthor !== parsed.author) {
+        advisories.push(
+          `superseding a decision authored by ${predAuthor} — flag them before merging`,
+        );
+      }
+    }
 
-    // 5. Hand predecessor slugs to the successor (merge + dedupe).
-    const movedSlugs = predecessors.flatMap((p) => [...p.aliases]);
-    const successorAliases = dedupeAliases([...parsed.aliases, ...movedSlugs]);
-    const successorFm: Frontmatter = { ...parsed, aliases: successorAliases };
-
-    // 6. Write the successor FIRST (ndr:0051 ordering) so a crash overcounts
+    // 5. Write the successor FIRST (ndr:0051 ordering) so a crash overcounts
     //    rather than drops.
     const filename = `${id}-${slugifyTitle(parsed.title)}.md`;
     const body = patchBodyPlaceholder(draft.body, id);
-    await this.writeAtomFile(filename, successorFm, body);
+    await this.writeAtomFile(filename, parsed, body);
 
-    // 7. Patch each predecessor: flip to superseded, add the back-link, vacate its
-    //    slugs. A failure here is a reported half-state, not a silent drop.
+    // 6. Patch each predecessor: flip to superseded, add the plain-id back-link.
+    //    A failure here is a reported half-state, not a silent drop.
     const superseded: SupersededRecord[] = [];
-    const aliasesMoved: AliasMove[] = [];
     for (const pred of predecessors) {
       try {
-        await this.patchPredecessor(pred, filename);
+        await this.patchPredecessor(pred, id);
       } catch (err) {
         throw new HalfStateError(
           {
             successor_written: filename,
             superseded_so_far: superseded,
-            aliases_moved_so_far: aliasesMoved,
             failed_predecessor: pred.filename,
           },
           err,
         );
       }
       superseded.push({ id: pred.id, path: pred.filename });
-      for (const slug of pred.aliases) {
-        aliasesMoved.push({ slug, from: pred.id, to: id });
-      }
     }
 
-    return { id: asAtomId(id), path: filename, superseded, aliases_moved: aliasesMoved };
+    return { id: asAtomId(id), path: filename, superseded, advisories };
   }
 
-  // Validate the draft frontmatter against the schema, then enforce the capture-only
-  // rule that aliases carry the `ndr-` namespace prefix (the schema accepts any
-  // kebab slug so the read side can match either form).
+  // Validate the draft frontmatter against the schema, then gate `binds` on
+  // glob syntax only — no must-match-a-file rule, since a fresh binding can
+  // legitimately point at code that doesn't exist yet.
   private validateDraft(candidate: Record<string, unknown>): Frontmatter {
     const result = FrontmatterSchema.safeParse(candidate);
     if (!result.success) {
@@ -252,11 +243,16 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort, DoctorPort {
         result.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`),
       );
     }
-    const badAliases = result.data.aliases.filter((a) => !a.startsWith("ndr-"));
-    if (badAliases.length > 0) {
-      throw new DraftValidationError(
-        badAliases.map((a) => `alias \`${a}\` must carry the \`ndr-\` prefix (ndr:0050)`),
-      );
+    const badGlobs = result.data.binds.filter((p) => {
+      try {
+        new Bun.Glob(p).match("probe");
+        return false;
+      } catch {
+        return true;
+      }
+    });
+    if (badGlobs.length > 0) {
+      throw new DraftValidationError(badGlobs.map((p) => `binds glob \`${p}\` is not parseable`));
     }
     return result.data;
   }
@@ -292,9 +288,9 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort, DoctorPort {
     const conflicts: string[] = [];
 
     for (const link of links) {
-      const predId = extractAtomIdFromWikilink(link);
+      const predId = extractAtomIdFromRef(link);
       if (predId === null) {
-        errors.push(`supersedes entry \`${link}\` is not a recognizable wikilink`);
+        errors.push(`supersedes entry \`${link}\` is not a recognizable atom reference`);
         continue;
       }
       const file = await this.findFileForId(predId);
@@ -325,10 +321,7 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort, DoctorPort {
         continue;
       }
 
-      const aliases = Array.isArray(data.aliases)
-        ? data.aliases.filter((a): a is string => typeof a === "string")
-        : [];
-      out.push({ id: predId, filename: path.basename(file), aliases, data, body });
+      out.push({ id: predId, filename: path.basename(file), data, body });
     }
 
     // Dangling/unreadable references are the more fundamental error — surface them
@@ -336,31 +329,6 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort, DoctorPort {
     if (errors.length > 0) throw new DraftValidationError(errors);
     if (conflicts.length > 0) throw new SupersessionConflictError(conflicts);
     return out;
-  }
-
-  private async assertSlugsUnique(
-    draftAliases: readonly string[],
-    exemptIds: readonly string[],
-  ): Promise<void> {
-    if (draftAliases.length === 0) return;
-    const exempt = new Set(exemptIds);
-    const owners = new Map<string, string>();
-    for (const atom of await this.readAllAtoms()) {
-      if (exempt.has(atom.frontmatter.id)) continue;
-      for (const alias of atom.frontmatter.aliases) {
-        owners.set(normalizeSlug(alias), atom.frontmatter.id);
-      }
-    }
-    const errors: string[] = [];
-    for (const alias of draftAliases) {
-      const owner = owners.get(normalizeSlug(alias));
-      if (owner !== undefined) {
-        errors.push(
-          `slug \`${alias}\` is already held by atom ${owner} (ndr:0050 — one slug, one atom)`,
-        );
-      }
-    }
-    if (errors.length > 0) throw new DraftValidationError(errors);
   }
 
   private async writeAtomFile(
@@ -386,14 +354,13 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort, DoctorPort {
 
   // Patch the raw parsed frontmatter (not the schema-shaped object) so the
   // predecessor keeps its original key order and gains no injected defaults.
-  private async patchPredecessor(pred: PredecessorState, successorFilename: string): Promise<void> {
-    const successorWikilink = `[[Decisions/${successorFilename.replace(/\.md$/, "")}]]`;
+  // The back-link is the plain successor id (ndr:0144 drops wikilinks).
+  private async patchPredecessor(pred: PredecessorState, successorId: string): Promise<void> {
     const data: Record<string, unknown> = { ...pred.data };
     data.status = "superseded";
     const backlinks = Array.isArray(data.superseded_by) ? [...data.superseded_by] : [];
-    if (!backlinks.includes(successorWikilink)) backlinks.push(successorWikilink);
+    if (!backlinks.includes(successorId)) backlinks.push(successorId);
     data.superseded_by = backlinks;
-    if (pred.aliases.length > 0) data.aliases = [];
     const yaml = stringifyFrontmatter(data);
     const bodyBlock = pred.body.startsWith("\n") ? pred.body : `\n${pred.body}`;
     await fs.writeFile(
@@ -538,10 +505,6 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort, DoctorPort {
   }
 }
 
-function hasAlias(atom: Atom, normalizedTarget: string): boolean {
-  return atom.frontmatter.aliases.some((alias) => normalizeSlug(alias) === normalizedTarget);
-}
-
 function slugifyTitle(title: string): string {
   return title
     .toLowerCase()
@@ -558,7 +521,6 @@ function withCaptureDefaults(fm: Record<string, unknown>): Record<string, unknow
   return {
     status: "current",
     supersedes: [],
-    tags: ["decision"],
     ...fm,
   };
 }
@@ -569,18 +531,4 @@ function withCaptureDefaults(fm: Record<string, unknown>): Record<string, unknow
 // left untouched.
 function patchBodyPlaceholder(body: string, id: string): string {
   return body.replace("# PLACEHOLDER —", `# ${id} —`).replace("# PLACEHOLDER -", `# ${id} -`);
-}
-
-// Slugs handed from predecessors can overlap a successor's own aliases; keep
-// each only once, preserving first-seen order.
-function dedupeAliases(aliases: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const alias of aliases) {
-    const key = normalizeSlug(alias);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(alias);
-  }
-  return out;
 }
