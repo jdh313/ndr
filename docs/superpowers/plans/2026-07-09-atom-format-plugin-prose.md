@@ -723,11 +723,13 @@ Expected: no output.
 
 - [ ] **Step 2: Edit `plugins/ndr/agents/ndr-curator.md`**
 
-- (~line 3): drop "alias drift" from the sweep list; "taxonomy violations" → "label violations".
-- (~lines 51-58 JSON `issues` shape): delete the `"alias_drift": []` key; rename `"taxonomy": []` → `"labels": []`.
+**CLI ground truth (verified against merged `src/`):** `ndr doctor --json` emits `issues` keyed by `CheckClass`, which is still literally named `taxonomy` (it validates labels now). The removed class is `alias_drift`; the ADDED classes are `binds_stale` and `context_section`. So the curator must KEEP the `taxonomy` key, DELETE `alias_drift`, and ADD `binds_stale` + `context_section`. Do NOT rename `taxonomy` to `labels` — the curator mirrors the doctor JSON, and the doctor emits `taxonomy`.
+
+- (~line 3 sweep list): drop "alias drift"; add "stale binds" and "context section"; "taxonomy violations" → "taxonomy (label) violations".
+- (~lines 51-58 JSON `issues` shape): delete the `"alias_drift": []` key; ADD `"binds_stale": []` and `"context_section": []`; KEEP `"taxonomy": []` unchanged.
 - (~line 66): delete "(alias-drift entries carry slug / holders instead of a single path)".
-- (~line 69): delete the "alias_drift — high; slug resolution becomes ambiguous..." bullet.
-- (~line 72): "taxonomy — low-medium; usually a vocabulary decision (add to taxonomy vs. fix the atom)" → "labels — low-medium; usually a vocabulary decision (add to `labels.yaml` vs. fix the atom)".
+- (~line 69): delete the "alias_drift — high; slug resolution becomes ambiguous..." bullet; ADD severity bullets: "binds_stale — low; a glob matched nothing, code likely moved/deleted (owned by drift-check for semantic drift)." and "context_section — low-medium; a migrated atom missing real `## Context` (placeholder-only is advisory)."
+- (~line 72): "taxonomy — low-medium; usually a vocabulary decision (add to taxonomy vs. fix the atom)" → "taxonomy — low-medium; a label not in `labels.yaml`; usually a vocabulary decision (add to `labels.yaml` vs. fix the atom)".
 
 - [ ] **Step 3: Edit `plugins/ndr/agents/ndr-extractor.md`**
 
