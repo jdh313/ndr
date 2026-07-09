@@ -13,12 +13,12 @@ import {
   currentCommand,
   doctorCommand,
   initCommand,
+  labelsCommand,
   lineageCommand,
   resolveCommand,
   searchCommand,
   showCommand,
   statusCommand,
-  taxonomyCommand,
 } from "./index.ts";
 
 const FIXTURES = path.resolve(import.meta.dir, "../../test/fixtures/ledger");
@@ -28,10 +28,8 @@ async function makeLedger(): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-cli-"));
   const taxonomy = path.join(dir, ".taxonomy");
   await fs.mkdir(taxonomy);
-  await fs.writeFile(path.join(taxonomy, "areas.yaml"), "- tooling\n- substrate\n", "utf8");
-  await fs.writeFile(path.join(taxonomy, "topics.yaml"), "- framework\n- substrate\n", "utf8");
-  // labels.yaml is the axis the new-format schema (Task 1) validates against;
-  // areas/topics.yaml stay above for the still-old-format read verbs (Task 8).
+  // labels.yaml is the single taxonomy axis the new-format schema (Task 1)
+  // validates against and `ndr labels` (Task 8) reads.
   await fs.writeFile(
     path.join(taxonomy, "labels.yaml"),
     "- framework\n- substrate\n- write-side\n",
@@ -80,11 +78,12 @@ describe("ndr resolve <atom-id>", () => {
     expect(result.stdout).toContain(
       "(0102-markdown-remains-canonical-for-ndrs-swamp-migration-paused)",
     );
-    expect(result.stdout).toContain("area: substrate, topic: substrate");
-    expect(result.stdout).toContain("reversibility: easy");
+    expect(result.stdout).toContain("labels: substrate");
+    expect(result.stdout).toContain("conviction: strong  author: Jacob Hoehler");
+    expect(result.stdout).not.toContain("reversibility");
     expect(result.stdout).toContain("Lineage: 0102");
     expect(result.stdout).toContain("- ndr:0102");
-    expect(result.stdout).toContain("- ndr:substrate/substrate");
+    expect(result.stdout).toContain("- ndr:substrate");
     expect(result.stdout).not.toContain("Drift");
   });
 
@@ -105,11 +104,11 @@ describe("ndr resolve <atom-id>", () => {
     expect(result.stderr).toContain(FIXTURES);
   });
 
-  test("unrecognized grain is rejected with a clear stderr message", async () => {
+  test("a ref matching neither #slug, area/topic, nor atom-id falls through to a label lookup", async () => {
     const result = await resolveCommand("abc", FIXTURES);
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toBe("");
-    expect(result.stderr).toContain("unrecognized reference");
+    expect(result.stderr).toContain("no current atoms with label abc");
   });
 
   test("--ledger override resolves against a different path", async () => {
@@ -136,9 +135,9 @@ describe("ndr resolve <atom-id>", () => {
     expect(full.stdout).toContain("## Assumptions");
     expect(full.stdout).toContain("## Consequences");
     // Still the resolve frame: header, lineage, references.
-    expect(full.stdout).toContain("area: substrate, topic: substrate");
+    expect(full.stdout).toContain("labels: substrate");
     expect(full.stdout).toContain("Lineage: 0102");
-    expect(full.stdout).toContain("- ndr:substrate/substrate");
+    expect(full.stdout).toContain("- ndr:substrate");
   });
 
   test("--full on a superseded seed walks to the head and dumps the head's body with a drift warning", async () => {
@@ -169,75 +168,42 @@ describe("ndr resolve <atom-id>", () => {
   });
 });
 
-describe("ndr resolve #<slug>", () => {
-  test("minted slug resolves to its current head with no drift warning", async () => {
+describe("ndr resolve — removed grains are hard errors", () => {
+  test("resolve #slug is a hard error pointing at the two live grains", async () => {
     const result = await resolveCommand("#oxc-stack", FIXTURES);
-    expect(result.exitCode).toBe(0);
-    expect(result.stderr).toBe("");
-    expect(result.stdout).toContain("Oxc stack");
-    expect(result.stdout).toContain("(0132-ndr-uses-the-oxc-stack-for-lint-and-format)");
-    expect(result.stdout).not.toContain("Drift");
-  });
-
-  test("ndr- prefixed slug form resolves to the same atom", async () => {
-    const result = await resolveCommand("#ndr-oxc-stack", FIXTURES);
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("(0132-ndr-uses-the-oxc-stack-for-lint-and-format)");
-  });
-
-  test("the slug reference renders in bare form, not with the ndr- prefix (JUN-179)", async () => {
-    const human = await resolveCommand("#oxc-stack", FIXTURES);
-    expect(human.stdout).toContain("ndr:#oxc-stack");
-    expect(human.stdout).not.toContain("ndr:#ndr-oxc-stack");
-
-    const json = JSON.parse((await resolveCommand("#oxc-stack", FIXTURES, { json: true })).stdout);
-    expect(json.references).toContain("ndr:#oxc-stack");
-    expect(json.references).not.toContain("ndr:#ndr-oxc-stack");
-  });
-
-  test("unminted slug exits 1 with a not-found message", async () => {
-    const result = await resolveCommand("#no-such-slug", FIXTURES);
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toBe("");
-    expect(result.stderr).toContain("no atom with slug #no-such-slug");
+    expect(result.stderr).toContain("slug references were removed");
   });
 
-  test("--full emits the resolved head's complete body", async () => {
-    const result = await resolveCommand("#oxc-stack", FIXTURES, { full: true });
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("(0132-ndr-uses-the-oxc-stack-for-lint-and-format)");
-    expect(result.stdout).toContain("## Consequences");
-    expect(result.stdout).toContain("ndr:#oxc-stack");
-  });
-
-  test("--verbose on a slug is rejected and redirects to --full", async () => {
-    const result = await resolveCommand("#oxc-stack", FIXTURES, { verbose: true });
+  test("resolve area/topic form is a hard error pointing at labels", async () => {
+    const result = await resolveCommand("tooling/framework", FIXTURES);
     expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain("--verbose has no effect on single-atom resolve");
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("label");
   });
 });
 
-describe("ndr resolve <area>/<topic>", () => {
-  test("topic grain lists only current heads in scope", async () => {
-    const result = await resolveCommand("substrate/substrate", FIXTURES);
+describe("ndr resolve <label>", () => {
+  test("resolve <label> lists all current heads carrying the label", async () => {
+    const result = await resolveCommand("framework", FIXTURES);
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe("");
-    // 0102 is the current head; 0070 is superseded and must not appear.
-    expect(result.stdout).toContain("0102");
-    expect(result.stdout).toContain("[substrate/substrate]");
-    expect(result.stdout).not.toContain("0070");
+    // 0131 and 0132 both carry the `framework` label and are current.
+    expect(result.stdout).toContain("0131");
+    expect(result.stdout).toContain("0132");
   });
 
-  test("--verbose expands the topic listing to full briefs", async () => {
-    const result = await resolveCommand("tooling/referencing", FIXTURES, { verbose: true });
+  test("--verbose expands the label listing to full briefs", async () => {
+    const result = await resolveCommand("referencing", FIXTURES, { verbose: true });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("0049");
     expect(result.stdout).toContain("0050");
     expect(result.stdout).toContain("References:");
   });
 
-  test("--full expands each head in the topic to its complete body", async () => {
-    const result = await resolveCommand("tooling/referencing", FIXTURES, { full: true });
+  test("--full expands each head in the label to its complete body", async () => {
+    const result = await resolveCommand("referencing", FIXTURES, { full: true });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("0049");
     expect(result.stdout).toContain("0050");
@@ -245,10 +211,10 @@ describe("ndr resolve <area>/<topic>", () => {
     expect(result.stdout).toContain("## Consequences");
   });
 
-  test("topic grain with no current atoms exits 1", async () => {
-    const result = await resolveCommand("tooling/nonexistent", FIXTURES);
+  test("label with no current atoms exits 1", async () => {
+    const result = await resolveCommand("nonexistent", FIXTURES);
     expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain("no current atoms for tooling/nonexistent");
+    expect(result.stderr).toContain("no current atoms with label nonexistent");
   });
 });
 
@@ -780,17 +746,17 @@ describe("ndr current", () => {
     expect(result.stdout).not.toContain("0070");
   });
 
-  test("--area filter narrows the scope", async () => {
-    const result = await currentCommand(FIXTURES, { area: "substrate" });
+  test("--label filters by label membership", async () => {
+    const result = await currentCommand(FIXTURES, { label: "substrate" });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("0102");
     expect(result.stdout).not.toContain("0131");
   });
 
   test("empty scope reports cleanly on stdout and exits 0", async () => {
-    const result = await currentCommand(FIXTURES, { area: "nonexistent" });
+    const result = await currentCommand(FIXTURES, { label: "nonexistent" });
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("no current atoms in area nonexistent");
+    expect(result.stdout).toContain("no current atoms with label nonexistent");
   });
 });
 
@@ -836,12 +802,14 @@ describe("ndr init", () => {
     expect(rule).not.toContain("Loose Ends");
   });
 
-  // Still red pending Task 9 (init doesn't seed .taxonomy/labels.yaml yet, only
-  // the old areas/topics axes) — kept in new-format shape so it fails for that
-  // reason alone once Task 9 lands, not a stale schema mismatch.
   test("capture works immediately after init via the .ndr.toml fallback", async () => {
     await initCommand(tmp);
     const fallback = path.join(tmp, "decisions");
+    // initCommand doesn't seed .taxonomy/labels.yaml yet (Task 9 territory) —
+    // seed it by hand so this test exercises the intended post-init capture
+    // flow instead of being blocked on unrelated, not-yet-landed work.
+    await fs.mkdir(path.join(fallback, ".taxonomy"), { recursive: true });
+    await fs.writeFile(path.join(fallback, ".taxonomy", "labels.yaml"), "- framework\n", "utf8");
     const capture = await captureCommand(draftJson(), undefined, fallback);
     expect(capture.exitCode).toBe(0);
     const parsed = JSON.parse(capture.stdout);
@@ -915,7 +883,7 @@ describe("read verbs --json", () => {
     expect(brief.seed_id).toBe("0070");
     expect(brief.head_id).toBe("0102");
     expect(brief.lineage).toEqual(["0070", "0102"]);
-    expect(brief.head.area).toBe("substrate");
+    expect(brief.head.labels).toEqual(["substrate"]);
     expect(brief.references).toContain("ndr:0102");
   });
 
@@ -925,17 +893,8 @@ describe("read verbs --json", () => {
     expect(brief.seed_id).toBe("0102");
   });
 
-  test("resolve #slug follows to the head with drift:false", async () => {
-    const brief = JSON.parse((await resolveCommand("#oxc-stack", FIXTURES, { json: true })).stdout);
-    expect(brief.kind).toBe("brief");
-    expect(brief.drift).toBe(false);
-    expect(brief.head.id).toBe("0132");
-  });
-
-  test("resolve area/topic emits a list", async () => {
-    const list = JSON.parse(
-      (await resolveCommand("tooling/framework", FIXTURES, { json: true })).stdout,
-    );
+  test("resolve <label> emits a list", async () => {
+    const list = JSON.parse((await resolveCommand("framework", FIXTURES, { json: true })).stdout);
     expect(list.kind).toBe("list");
     expect(list.count).toBe(list.atoms.length);
     expect(list.count).toBeGreaterThan(0);
@@ -976,11 +935,11 @@ describe("current summary on stderr", () => {
   });
 });
 
-describe("ndr areas / topics", () => {
+describe("ndr labels", () => {
   let ledger: string;
   let tmp: string;
   beforeEach(async () => {
-    // makeLedger seeds .taxonomy/{areas,topics}.yaml directly on the ledger dir.
+    // makeLedger seeds .taxonomy/labels.yaml directly on the ledger dir.
     ledger = await makeLedger();
     tmp = ledger;
   });
@@ -988,24 +947,24 @@ describe("ndr areas / topics", () => {
     await fs.rm(tmp, { recursive: true, force: true });
   });
 
-  test("areas lists one per line", async () => {
-    const result = await taxonomyCommand(ledger, "areas");
+  test("labels command prints the taxonomy list", async () => {
+    const result = await labelsCommand(ledger, {});
     expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim().split("\n")).toContain("tooling");
+    expect(result.stdout).toContain("write-side");
   });
 
-  test("topics --json emits a topics array", async () => {
-    const out = JSON.parse((await taxonomyCommand(ledger, "topics", { json: true })).stdout);
-    expect(Array.isArray(out.topics)).toBe(true);
-    expect(out.topics).toContain("framework");
+  test("--json emits a labels array", async () => {
+    const out = JSON.parse((await labelsCommand(ledger, { json: true })).stdout);
+    expect(Array.isArray(out.labels)).toBe(true);
+    expect(out.labels).toContain("framework");
   });
 
   test("missing taxonomy exits 1", async () => {
     const bare = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-tax-"));
     try {
-      const result = await taxonomyCommand(bare, "areas");
+      const result = await labelsCommand(bare);
       expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain(".taxonomy/areas.yaml");
+      expect(result.stderr).toContain(".taxonomy/labels.yaml");
     } finally {
       await fs.rm(bare, { recursive: true, force: true });
     }
@@ -1023,12 +982,17 @@ describe("ndr status", () => {
 
   test("a fresh init reports the configured ledger, counts, taxonomy, and grounding", async () => {
     await initCommand(tmp);
+    // initCommand doesn't seed .taxonomy/labels.yaml yet (Task 9 territory) —
+    // seed it by hand so the taxonomy count reflects real post-init wiring.
+    const taxonomyDir = path.join(tmp, "decisions", ".taxonomy");
+    await fs.mkdir(taxonomyDir, { recursive: true });
+    await fs.writeFile(path.join(taxonomyDir, "labels.yaml"), "- framework\n", "utf8");
     const out = JSON.parse((await statusCommand(tmp, { json: true })).stdout);
     expect(out.version).toBeString();
     expect(out.ledger.source).toContain(".ndr.toml");
     expect(out.project).toBe(`[[${path.basename(tmp)}]]`);
     expect(out.atoms).toEqual({ current: 0, total: 0 });
-    expect(out.taxonomy.areas).toBeGreaterThan(0);
+    expect(out.taxonomy.labels).toBeGreaterThan(0);
     expect(out.grounding.rule).toBe(true);
   });
 

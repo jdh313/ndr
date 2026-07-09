@@ -3,26 +3,16 @@ id: '0102'
 title: Markdown remains canonical for NDRs; swamp migration paused
 status: current
 decision_date: '2026-05-24'
-aliases: []
+author: "Jacob Hoehler"
+conviction: strong
 project: '[[Decision Pipeline]]'
 derived_from: []
 informed_by: []
+labels:
+  - substrate
 supersedes:
-- '[[Decisions/0070-ndr-adopts-hybrid-architecture-swamp-canonical-vault-as-projection]]'
+  - '0070'
 superseded_by: []
-area: substrate
-topic: substrate
-impacts: []
-revisit_triggers:
-- Concrete pain emerges that markdown + obsidian-cli + MCP cannot handle
-- Cross-type queries that obsidian-cli base:query and MCP search_notes cannot satisfy
-- Supersession-chain traversal becomes too slow for daily use
-- A step-change in DB tooling that reframes the build-vs-adopt tradeoff
-- A separate decision validates typed-record substrate for other atom types and explicitly
-  extends to NDRs
-reversibility: easy
-tags:
-- decision
 ---
 # 0102 — Markdown remains canonical for NDRs; swamp migration paused
 

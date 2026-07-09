@@ -3,23 +3,17 @@ id: '0132'
 title: ndr uses the Oxc stack for lint and format
 status: current
 decision_date: '2026-06-01'
-aliases:
-- ndr-oxc-stack
+author: "Jacob Hoehler"
+conviction: strong
 project: '[[ndr]]'
 derived_from:
-- "[[JUN-170 \u2014 Scaffold repo: bun init, deps, lint/format]]"
-informed_by:
-- '[[Decisions/0128-ndr-tooling-uses-typescript-and-bun-for-v1]]'
+- "[[JUN-170 — Scaffold repo: bun init, deps, lint/format]]"
+informed_by: []
+labels:
+- framework
+- lint-format
 supersedes: []
 superseded_by: []
-area: tooling
-topic: lint-format
-impacts: []
-revisit_triggers:
-- a load-bearing lint rule requires an ESLint-only plugin
-reversibility: medium
-tags:
-- decision
 ---
 # 0132 — ndr uses the Oxc stack for lint and format
 

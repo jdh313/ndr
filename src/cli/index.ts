@@ -54,8 +54,7 @@ export interface ListOptions {
 }
 
 export interface CurrentOptions extends ListOptions {
-  readonly area?: string;
-  readonly topic?: string;
+  readonly label?: string;
 }
 
 function jsonResult(payload: unknown): ResolveResult {
@@ -94,12 +93,12 @@ export async function run(argv: readonly string[]): Promise<number> {
 
   program
     .command("resolve <ref>")
-    .description("Resolve an ndr reference (atom-id, #slug, or area/topic) and print a brief.")
+    .description("Resolve an ndr reference (atom-id or label) and print a brief.")
     .option("--ledger <path>", "Ledger directory to resolve against (default: .ndr.toml walk-up).")
-    .option("--verbose", "Expand multi-atom (area/topic) results to full briefs.", false)
+    .option("--verbose", "Expand multi-atom (label) results to full briefs.", false)
     .option(
       "--full",
-      "Emit the head's complete body (every section) instead of the gist; for area/topic, every head.",
+      "Emit the head's complete body (every section) instead of the gist; for a label, every head.",
       false,
     )
     .option("--json", "Emit structured JSON instead of the human brief.", false)
@@ -164,26 +163,18 @@ export async function run(argv: readonly string[]): Promise<number> {
 
   program
     .command("current")
-    .description("List all current atoms, optionally filtered by area and/or topic.")
+    .description("List all current atoms, optionally filtered by label.")
     .option("--ledger <path>", "Ledger directory to list (default: .ndr.toml walk-up).")
-    .option("--area <area>", "Restrict to a single area.")
-    .option("--topic <topic>", "Restrict to a single topic.")
+    .option("--label <label>", "Restrict to a single label.")
     .option("--verbose", "Expand results to full briefs.", false)
     .option("--json", "Emit structured JSON instead of the human list.", false)
     .action(
-      async (options: {
-        ledger?: string;
-        area?: string;
-        topic?: string;
-        verbose: boolean;
-        json: boolean;
-      }) => {
+      async (options: { ledger?: string; label?: string; verbose: boolean; json: boolean }) => {
         const ledger = resolveLedger(options.ledger);
         if (ledger === null) return;
         emit(
           await currentCommand(ledger, {
-            area: options.area,
-            topic: options.topic,
+            label: options.label,
             verbose: options.verbose,
             json: options.json,
           }),
@@ -212,18 +203,16 @@ export async function run(argv: readonly string[]): Promise<number> {
       emit(await statusCommand(process.cwd(), { ledger: options.ledger, json: options.json }));
     });
 
-  for (const axis of ["areas", "topics"] as const) {
-    program
-      .command(axis)
-      .description(`List the ${axis} in the resolved ledger's taxonomy.`)
-      .option("--ledger <path>", "Ledger directory to read (default: .ndr.toml walk-up).")
-      .option("--json", "Emit a structured JSON list.", false)
-      .action(async (options: { ledger?: string; json: boolean }) => {
-        const ledger = resolveLedger(options.ledger);
-        if (ledger === null) return;
-        emit(await taxonomyCommand(ledger, axis, { json: options.json }));
-      });
-  }
+  program
+    .command("labels")
+    .description("List the labels in the resolved ledger's taxonomy.")
+    .option("--ledger <path>", "Ledger directory to read (default: .ndr.toml walk-up).")
+    .option("--json", "Emit a structured JSON list.", false)
+    .action(async (options: { ledger?: string; json: boolean }) => {
+      const ledger = resolveLedger(options.ledger);
+      if (ledger === null) return;
+      emit(await labelsCommand(ledger, { json: options.json }));
+    });
 
   program
     .command("init")
@@ -293,19 +282,24 @@ export async function resolveCommand(
   };
 
   if (ref.startsWith("#")) {
-    return await resolveSlug(adapter, ref.slice(1), ledgerPath, resolveOpts);
+    return {
+      stdout: "",
+      stderr:
+        "slug references were removed with the format rework — use an atom-id (ndr:0042) or a label (ndr:write-side)\n",
+      exitCode: 1,
+    };
   }
   if (ref.includes("/")) {
-    return await resolveTopic(adapter, ref, ledgerPath, resolveOpts);
+    return {
+      stdout: "",
+      stderr: `area/topic references were replaced by labels — try \`ndr resolve ${ref.split("/").pop()}\` or \`ndr labels\`\n`,
+      exitCode: 1,
+    };
   }
   if (ATOM_ID_REF.test(ref)) {
     return await resolveAtomId(adapter, ref, ledgerPath, resolveOpts);
   }
-  return {
-    stdout: "",
-    stderr: `unrecognized reference ${JSON.stringify(ref)} — use an atom-id (e.g. 0042 or k3m9xq), #<slug>, or <area>/<topic>\n`,
-    exitCode: 1,
-  };
+  return await resolveLabel(adapter, ref, ledgerPath, resolveOpts);
 }
 
 interface ResolveOpts {
@@ -354,55 +348,20 @@ async function resolveAtomId(
   return { stdout: formatBrief(chain, headFilename, opts.full), stderr: "", exitCode: 0 };
 }
 
-async function resolveSlug(
+// Mirrors the old area/topic lookup, but on the single labels axis: all
+// current heads carrying the given label.
+async function resolveLabel(
   adapter: MarkdownLedgerAdapter,
-  slug: string,
+  label: string,
   ledgerPath: string,
   opts: ResolveOpts,
 ): Promise<ResolveResult> {
-  if (slug.length === 0) {
-    return { stdout: "", stderr: "empty slug reference — use #<slug>\n", exitCode: 1 };
-  }
-  if (opts.verbose && !opts.full) return rejectVerboseOnSingleAtom();
-
-  const head = await adapter.findBySlug(slug);
-  if (head === null) {
-    return {
-      stdout: "",
-      stderr: `no atom with slug #${slug} in ledger ${ledgerPath}\n`,
-      exitCode: 1,
-    };
-  }
-
-  // A slug tracks forward to the head, so there is no drift to surface
-  // (ndr:0049, ndr:0050) — render the head alone.
-  const headFilename = await adapter.getAtomFilename(asAtomId(head.frontmatter.id));
-  if (opts.json) return jsonResult(briefJson([head], headFilename, opts.full));
-  return { stdout: formatBrief([head], headFilename, opts.full), stderr: "", exitCode: 0 };
-}
-
-async function resolveTopic(
-  adapter: MarkdownLedgerAdapter,
-  ref: string,
-  ledgerPath: string,
-  opts: ResolveOpts,
-): Promise<ResolveResult> {
-  const parts = ref.split("/");
-  if (parts.length !== 2 || parts[0]!.length === 0 || parts[1]!.length === 0) {
-    return {
-      stdout: "",
-      stderr: `invalid topic reference ${JSON.stringify(ref)} — use <area>/<topic>\n`,
-      exitCode: 1,
-    };
-  }
-
-  const [area, topic] = parts as [string, string];
-  const atoms = await adapter.listCurrent({ area, topic });
+  const atoms = await adapter.listCurrent({ label });
   if (atoms.length === 0) {
     if (opts.json) return jsonResult({ kind: "list", count: 0, atoms: [] });
     return {
       stdout: "",
-      stderr: `no current atoms for ${area}/${topic} in ledger ${ledgerPath}\n`,
+      stderr: `no current atoms with label ${label} in ledger ${ledgerPath}\n`,
       exitCode: 1,
     };
   }
@@ -427,7 +386,7 @@ export async function showCommand(
   if (!ATOM_ID_REF.test(ref)) {
     return {
       stdout: "",
-      stderr: `invalid atom-id ${JSON.stringify(ref)} — show takes an atom-id (4-digit or 6-char base32); use resolve for #<slug> or <area>/<topic>\n`,
+      stderr: `invalid atom-id ${JSON.stringify(ref)} — show takes an atom-id (4-digit or 6-char base32); use resolve for a label\n`,
       exitCode: 1,
     };
   }
@@ -528,11 +487,11 @@ export async function currentCommand(
   opts: CurrentOptions = {},
 ): Promise<ResolveResult> {
   const adapter = new MarkdownLedgerAdapter(ledgerPath);
-  const atoms = await adapter.listCurrent({ area: opts.area, topic: opts.topic });
+  const atoms = await adapter.listCurrent({ label: opts.label });
   if (opts.json) return jsonResult(await listJson(atoms, adapter));
   if (atoms.length === 0) {
     return {
-      stdout: `no current atoms${describeScope(opts.area, opts.topic)}\n`,
+      stdout: `no current atoms${describeScope(opts.label)}\n`,
       stderr: "",
       exitCode: 0,
     };
@@ -543,7 +502,7 @@ export async function currentCommand(
   const noun = atoms.length === 1 ? "atom" : "atoms";
   return {
     stdout: await formatAtomList(atoms, opts.verbose ?? false, false, adapter),
-    stderr: `${atoms.length} current ${noun}${describeScope(opts.area, opts.topic)}\n`,
+    stderr: `${atoms.length} current ${noun}${describeScope(opts.label)}\n`,
     exitCode: 0,
   };
 }
@@ -552,13 +511,12 @@ export interface TaxonomyOptions {
   readonly json?: boolean;
 }
 
-// List one taxonomy axis (areas | topics) for the resolved ledger. Reuses the
-// adapter's doctor-grade reader, which returns null when the taxonomy is
+// List the single labels axis for the resolved ledger. Reuses the adapter's
+// doctor-grade reader, which returns null when the taxonomy is
 // missing/unreadable — here that is a hard error (exit 1) since the verb's whole
 // job is to print the list.
-export async function taxonomyCommand(
+export async function labelsCommand(
   ledgerPath: string,
-  axis: "areas" | "topics",
   opts: TaxonomyOptions = {},
 ): Promise<ResolveResult> {
   const adapter = new MarkdownLedgerAdapter(ledgerPath);
@@ -566,13 +524,12 @@ export async function taxonomyCommand(
   if (taxonomy === null) {
     return {
       stdout: "",
-      stderr: `no taxonomy in ledger ${ledgerPath} — expected .taxonomy/${axis}.yaml\n`,
+      stderr: `no taxonomy in ledger ${ledgerPath} — expected .taxonomy/labels.yaml\n`,
       exitCode: 1,
     };
   }
-  const values = taxonomy[axis];
-  if (opts.json) return jsonResult({ [axis]: values });
-  return { stdout: values.join("\n") + "\n", stderr: "", exitCode: 0 };
+  if (opts.json) return jsonResult({ labels: taxonomy.labels });
+  return { stdout: taxonomy.labels.join("\n") + "\n", stderr: "", exitCode: 0 };
 }
 
 export interface StatusOptions {
@@ -591,7 +548,7 @@ export async function statusCommand(cwd: string, opts: StatusOptions = {}): Prom
 
   // Atom counts + taxonomy, guarded for a missing/empty ledger dir.
   let atoms: { current: number; total: number } | null = null;
-  let taxonomy: { areas: number; topics: number } | null = null;
+  let taxonomy: { labels: number } | null = null;
   if (resolved.source.kind !== "none") {
     const adapter = new MarkdownLedgerAdapter(resolved.path);
     try {
@@ -604,7 +561,7 @@ export async function statusCommand(cwd: string, opts: StatusOptions = {}): Prom
       atoms = null; // ledger dir missing or unreadable
     }
     const tax = await adapter.readTaxonomy();
-    if (tax !== null) taxonomy = { areas: tax.areas.length, topics: tax.topics.length };
+    if (tax !== null) taxonomy = { labels: tax.labels.length };
   }
 
   // Grounding markers (fs checks at cwd).
@@ -634,9 +591,7 @@ export async function statusCommand(cwd: string, opts: StatusOptions = {}): Prom
     lines.push(
       `atoms:     ${atoms ? `${atoms.current} current / ${atoms.total} total` : "ledger directory missing"}`,
     );
-    lines.push(
-      `taxonomy:  ${taxonomy ? `${taxonomy.areas} areas, ${taxonomy.topics} topics` : "missing"}`,
-    );
+    lines.push(`taxonomy:  ${taxonomy ? `${taxonomy.labels} labels` : "missing"}`);
   }
   const grounding = ruleExists
     ? ".claude/rules/ndr.md present"
@@ -1071,15 +1026,8 @@ async function readStdin(): Promise<string> {
 // Structured JSON output for the read verbs (--json). Complements the pinned
 // human brief (ndr:0136) so skills and other library consumers parse data
 // instead of formatted text. `references` mirrors the brief's References block.
-// The pasteable slug reference uses the bare form (ndr:0049) — strip the
-// storage-only `ndr-` alias prefix (ndr:0050) so `ndr-oxc-stack` emits as
-// `ndr:#oxc-stack`, the form `ndr resolve` accepts back.
-function slugRef(alias: string): string {
-  return `ndr:#${alias.replace(/^ndr-/, "")}`;
-}
-
 function atomReferences(fm: Atom["frontmatter"]): string[] {
-  return [`ndr:${fm.id}`, ...fm.aliases.map(slugRef), `ndr:${fm.area}/${fm.topic}`];
+  return [`ndr:${fm.id}`, ...fm.labels.map((l) => `ndr:${l}`)];
 }
 
 // `includeBody` rides the `--full` flag through the JSON path: the gist stays
@@ -1094,11 +1042,11 @@ function atomSummary(
   const summary: Record<string, unknown> = {
     id: fm.id,
     title: fm.title,
-    area: fm.area,
-    topic: fm.topic,
+    labels: fm.labels,
+    conviction: fm.conviction,
+    author: fm.author,
     status: fm.status,
     decision_date: formatDate(fm.decision_date),
-    reversibility: fm.reversibility,
     path: filename ? filename.replace(/\.md$/, "") : null,
     gist: extractGist(atom.body),
   };
@@ -1156,8 +1104,8 @@ export function formatBrief(
   const fm = head.frontmatter;
   const pathRef = headFilename ? headFilename.replace(/\.md$/, "") : `ndr:${fm.id}`;
   lines.push(`${fm.title} (${pathRef})`);
-  lines.push(`  area: ${fm.area}, topic: ${fm.topic}, decision: ${formatDate(fm.decision_date)}`);
-  lines.push(`  reversibility: ${fm.reversibility}`);
+  lines.push(`  labels: ${fm.labels.join(", ")}  decision: ${formatDate(fm.decision_date)}`);
+  lines.push(`  conviction: ${fm.conviction}  author: ${fm.author}`);
   lines.push("");
 
   if (full) {
@@ -1180,19 +1128,18 @@ export function formatBrief(
 
   lines.push("References:");
   lines.push(`  - ndr:${fm.id}`);
-  for (const alias of fm.aliases) {
-    lines.push(`  - ${slugRef(alias)}`);
+  for (const label of fm.labels) {
+    lines.push(`  - ndr:${label}`);
   }
-  lines.push(`  - ndr:${fm.area}/${fm.topic}`);
 
   return lines.join("\n") + "\n";
 }
 
 // Compact one-line summary used by the list verbs (search, current, resolve
-// area/topic) when neither --verbose nor --full is set.
+// <label>) when neither --verbose nor --full is set.
 function formatCompactLine(atom: Atom): string {
   const fm = atom.frontmatter;
-  return `${fm.id}  ${fm.title}  [${fm.area}/${fm.topic}]`;
+  return `${fm.id}  ${fm.title}  [${fm.labels.join(",")}]`;
 }
 
 // `full` is the top rung of the verbosity ladder (compact → brief → full) and
@@ -1229,11 +1176,8 @@ function formatLineage(chain: readonly Atom[]): string {
   return lines.join("\n") + "\n";
 }
 
-function describeScope(area?: string, topic?: string): string {
-  if (area !== undefined && topic !== undefined) return ` for ${area}/${topic}`;
-  if (area !== undefined) return ` in area ${area}`;
-  if (topic !== undefined) return ` with topic ${topic}`;
-  return "";
+function describeScope(label?: string): string {
+  return label !== undefined ? ` with label ${label}` : "";
 }
 
 function formatDate(value: string | Date): string {
