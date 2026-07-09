@@ -3,6 +3,9 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { MarkdownLedgerAdapter } from "../adapters/markdown/adapter.ts";
+import { asAtomId } from "../domain/index.ts";
+import { draftFor } from "../test/helpers.ts";
 import {
   captureCommand,
   currentCommand,
@@ -25,32 +28,46 @@ async function makeLedger(): Promise<string> {
   await fs.mkdir(taxonomy);
   await fs.writeFile(path.join(taxonomy, "areas.yaml"), "- tooling\n- substrate\n", "utf8");
   await fs.writeFile(path.join(taxonomy, "topics.yaml"), "- framework\n- substrate\n", "utf8");
+  // labels.yaml is the axis the new-format schema (Task 1) validates against;
+  // areas/topics.yaml stay above for the still-old-format read verbs (Task 8).
+  await fs.writeFile(
+    path.join(taxonomy, "labels.yaml"),
+    "- framework\n- substrate\n- write-side\n",
+    "utf8",
+  );
   return dir;
 }
 
+// New-format (Task 1 schema) capture fixtures.
 function draftJson(fm: Record<string, unknown> = {}): string {
   return JSON.stringify({
     frontmatter: {
       title: "Use FastAPI",
       status: "current",
       decision_date: "2026-05-15",
-      aliases: [],
+      author: "Jacob Hoehler",
+      conviction: "tentative",
       project: "[[Auth]]",
-      derived_from: [],
-      informed_by: [],
+      labels: ["framework"],
       supersedes: [],
-      superseded_by: [],
-      area: "tooling",
-      topic: "framework",
-      impacts: [],
-      revisit_triggers: [],
-      reversibility: "medium",
-      tags: ["decision"],
       ...fm,
     },
     body: "\n# PLACEHOLDER — Use FastAPI\n\n## Decision\n\nUse FastAPI.\n",
   });
 }
+
+function newFormatDraft(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return draftFor(overrides).frontmatter as Record<string, unknown>;
+}
+
+function newFormatDraftWithout(field: string): Record<string, unknown> {
+  const fm = { ...newFormatDraft() };
+  delete fm[field];
+  return fm;
+}
+
+const MINIMAL_BODY =
+  "\n# PLACEHOLDER — Capture\n\n## Decision\n\nDo it.\n\n## Context\n\n- A fact.\n\n## Why\n\nBecause.\n";
 
 describe("ndr resolve <atom-id>", () => {
   test("head atom returns brief with no drift warning", async () => {
@@ -353,7 +370,7 @@ describe("ndr capture", () => {
   });
 
   test("a taxonomy violation exits 1 with a validation error", async () => {
-    const result = await captureCommand(draftJson({ area: "nope" }), tmp);
+    const result = await captureCommand(draftJson({ labels: ["nope"] }), tmp);
     expect(result.exitCode).toBe(1);
     expect(JSON.parse(result.stderr).error.kind).toBe("validation");
   });
@@ -361,10 +378,10 @@ describe("ndr capture", () => {
   test("an already-superseded predecessor exits 2", async () => {
     await fs.writeFile(
       path.join(tmp, "0001-old.md"),
-      '---\nid: "0001"\ntitle: Old\nstatus: superseded\ndecision_date: 2026-01-01\naliases: []\nproject: "[[X]]"\nsupersedes: []\nsuperseded_by: ["[[Decisions/0050-other]]"]\narea: tooling\ntopic: framework\nreversibility: easy\ntags: ["decision"]\n---\nbody\n',
+      '---\nid: "0001"\ntitle: Old\nstatus: superseded\ndecision_date: 2026-01-01\nauthor: "Jacob Hoehler"\nconviction: tentative\nproject: "[[X]]"\nlabels: ["framework"]\nsupersedes: []\nsuperseded_by: ["0050"]\n---\nbody\n',
       "utf8",
     );
-    const result = await captureCommand(draftJson({ supersedes: ["[[Decisions/0001-old]]"] }), tmp);
+    const result = await captureCommand(draftJson({ supersedes: ["0001"] }), tmp);
     expect(result.exitCode).toBe(2);
     expect(JSON.parse(result.stderr).error.kind).toBe("supersession_conflict");
   });
@@ -437,15 +454,15 @@ describe("ndr capture", () => {
     expect(written).toContain(`id: "${parsed.id}"`);
   });
 
-  test("a minimal draft omitting status/supersedes/tags captures with capture-intent defaults", async () => {
+  test("a minimal draft omitting status/supersedes captures with capture-intent defaults", async () => {
     const minimal = JSON.stringify({
       frontmatter: {
         title: "Minimal",
         decision_date: "2026-06-07",
+        author: "Jacob Hoehler",
+        conviction: "tentative",
         project: "[[t]]",
-        area: "tooling",
-        topic: "framework",
-        reversibility: "easy",
+        labels: ["framework"],
       },
       body: "\n# PLACEHOLDER — Minimal\n\n## Decision\n\nMinimal.\n",
     });
@@ -455,7 +472,34 @@ describe("ndr capture", () => {
     const written = await fs.readFile(path.join(tmp, parsed.path), "utf8");
     expect(written).toContain("status: current");
     expect(written).toContain("supersedes: []");
-    expect(written).toMatch(/tags:[\s\S]*decision/);
+  });
+
+  test("capture auto-fills author from git identity when draft omits it", async () => {
+    const draft = { frontmatter: newFormatDraftWithout("author"), body: MINIMAL_BODY };
+    const result = await captureCommand(JSON.stringify(draft), tmp, undefined, "Jacob Hoehler");
+    expect(result.exitCode).toBe(0);
+    const written = JSON.parse(result.stdout);
+    const atom = await new MarkdownLedgerAdapter(tmp).getAtom(asAtomId(written.id));
+    expect(atom.frontmatter.author).toBe("Jacob Hoehler");
+  });
+
+  test("capture without author and without git identity is a validation error", async () => {
+    const draft = { frontmatter: newFormatDraftWithout("author"), body: MINIMAL_BODY };
+    const result = await captureCommand(JSON.stringify(draft), tmp, undefined, null);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("author");
+  });
+
+  test("capture prints advisories to stderr with exit 0", async () => {
+    const adapter = new MarkdownLedgerAdapter(tmp);
+    const pred = await adapter.captureAtom(draftFor({ title: "theirs", author: "Nadia Petrova" }));
+    const draft = {
+      frontmatter: { ...newFormatDraft(), supersedes: [pred.id] },
+      body: MINIMAL_BODY,
+    };
+    const result = await captureCommand(JSON.stringify(draft), tmp, undefined, "Jacob Hoehler");
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toContain("flag them before merging");
   });
 });
 
@@ -694,14 +738,13 @@ describe("ndr init", () => {
     expect(rule).not.toContain("Loose Ends");
   });
 
+  // Still red pending Task 9 (init doesn't seed .taxonomy/labels.yaml yet, only
+  // the old areas/topics axes) — kept in new-format shape so it fails for that
+  // reason alone once Task 9 lands, not a stale schema mismatch.
   test("capture works immediately after init via the .ndr.toml fallback", async () => {
     await initCommand(tmp);
     const fallback = path.join(tmp, "decisions");
-    const capture = await captureCommand(
-      draftJson({ area: "tooling", topic: "framework" }),
-      undefined,
-      fallback,
-    );
+    const capture = await captureCommand(draftJson(), undefined, fallback);
     expect(capture.exitCode).toBe(0);
     const parsed = JSON.parse(capture.stdout);
     const current = await currentCommand(fallback);

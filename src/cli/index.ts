@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 
 import { Command } from "commander";
 
@@ -759,16 +761,34 @@ async function exists(target: string): Promise<boolean> {
   }
 }
 
+const execFileAsync = promisify(execFile);
+
+// Resolve the capturing human's identity. Null (not "") when git has no
+// user.name — the caller turns that into a validation error only if the
+// draft itself carries no author.
+async function gitUserName(): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync("git", ["config", "user.name"]);
+    const name = stdout.trim();
+    return name.length > 0 ? name : null;
+  } catch {
+    return null;
+  }
+}
+
 // Capture a decision atom. `rawJson` is the draft read from stdin; `ledgerFlag`
 // is the --ledger value if the user passed one. Ledger precedence: flag wins,
 // then the draft's `vault_decisions`, then `fallbackLedger` (the .ndr.toml
 // walk-up result, resolved by the caller); with none of the three the capture
-// errors. Outcomes map to exit codes 0 (ok) / 1 (validation) / 2 (supersession
-// conflict) / 3 (half-state).
+// errors. `gitIdentity` injects the git identity for tests — undefined (the
+// production default) resolves it via `git config user.name`. Outcomes map to
+// exit codes 0 (ok) / 1 (validation) / 2 (supersession conflict) / 3
+// (half-state).
 export async function captureCommand(
   rawJson: string,
   ledgerFlag?: string,
   fallbackLedger?: string,
+  gitIdentity?: string | null,
 ): Promise<ResolveResult> {
   let payload: unknown;
   try {
@@ -801,12 +821,24 @@ export async function captureCommand(
   // A top-level `supersedes` overrides the frontmatter field (persist.py parity).
   const frontmatter = { ...(p.frontmatter as Record<string, unknown>) };
   if (Array.isArray(p.supersedes)) frontmatter.supersedes = p.supersedes;
+  if (frontmatter.author === undefined) {
+    const identity = gitIdentity === undefined ? await gitUserName() : gitIdentity;
+    if (identity === null) {
+      return errorResult(
+        "validation",
+        ["author is required — set `git config user.name` or pass author in the draft"],
+        1,
+      );
+    }
+    frontmatter.author = identity;
+  }
   const draft = { frontmatter, body: p.body } as unknown as AtomDraft;
 
   const adapter = new MarkdownLedgerAdapter(ledgerPath);
   try {
     const result = await adapter.captureAtom(draft);
-    return { stdout: JSON.stringify(result, null, 2) + "\n", stderr: "", exitCode: 0 };
+    const stderr = result.advisories.map((a) => `ndr: advisory: ${a}\n`).join("");
+    return { stdout: JSON.stringify(result, null, 2) + "\n", stderr, exitCode: 0 };
   } catch (err) {
     if (err instanceof DraftValidationError) return errorResult("validation", err.messages, 1);
     if (err instanceof SupersessionConflictError) {
