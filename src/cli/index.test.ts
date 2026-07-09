@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { execFile } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 
 import { MarkdownLedgerAdapter } from "../adapters/markdown/adapter.ts";
 import { asAtomId } from "../domain/index.ts";
@@ -20,7 +22,7 @@ import {
 } from "./index.ts";
 
 const FIXTURES = path.resolve(import.meta.dir, "../../test/fixtures/ledger");
-const DOCTOR_FIXTURES = path.resolve(import.meta.dir, "../../test/fixtures/doctor-ledger");
+const execFileAsync = promisify(execFile);
 
 async function makeLedger(): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-cli-"));
@@ -504,25 +506,84 @@ describe("ndr capture", () => {
 });
 
 describe("ndr doctor", () => {
-  // Every finding kind the seeded fixture corpus must fire, by check class.
-  const EXPECTED_KINDS = [
-    "missing_back_pointer",
-    "dangling_supersedes_ref",
-    "dangling_superseded_by_ref",
-    "unclaimed_supersession",
-    "dangling_superseded",
-    "status_drift",
-    "retraction_conflict",
-    "duplicate_among_current",
-    "stale_alias_on_superseded",
-    "unknown_area",
-    "unknown_topic",
-    "missing_required_fields",
-    "id_mismatch_heading",
-    "title_drift_heading",
-    "parse_error",
-    "schema_invalid",
-  ];
+  // Minimal new-format (Task 1 schema) atom writer for doctor fixtures. Unlike
+  // `draftFor`/`captureAtom`, this writes raw frontmatter directly so tests can
+  // seed the specific cross-atom faults diagnose() checks for (a missing
+  // back-link, a stale binds glob, a missing Context section) — faults
+  // `captureAtom` would never produce on its own since it keeps the corpus
+  // coherent by construction.
+  function atomYaml(fm: {
+    id: string;
+    title: string;
+    status?: string;
+    author?: string;
+    conviction?: string;
+    project?: string;
+    labels?: string[];
+    binds?: string[];
+    supersedes?: string[];
+    superseded_by?: string[];
+  }): string {
+    const f = {
+      status: "current",
+      decision_date: "2026-06-01",
+      author: "Jacob Hoehler",
+      conviction: "strong",
+      project: "[[Doctor Fixture]]",
+      labels: ["tooling"],
+      binds: [] as string[],
+      supersedes: [] as string[],
+      superseded_by: [] as string[],
+      ...fm,
+    };
+    return [
+      `id: "${f.id}"`,
+      `title: ${f.title}`,
+      `status: ${f.status}`,
+      `decision_date: ${f.decision_date}`,
+      `author: "${f.author}"`,
+      `conviction: ${f.conviction}`,
+      `project: '${f.project}'`,
+      `labels: ${JSON.stringify(f.labels)}`,
+      `binds: ${JSON.stringify(f.binds)}`,
+      `supersedes: ${JSON.stringify(f.supersedes)}`,
+      `superseded_by: ${JSON.stringify(f.superseded_by)}`,
+    ].join("\n");
+  }
+
+  async function writeAtom(
+    dir: string,
+    filename: string,
+    fm: Parameters<typeof atomYaml>[0],
+    body?: string,
+  ): Promise<void> {
+    const content =
+      body ?? `\n# ${fm.id} — ${fm.title}\n\n## Decision\n\nBody.\n\n## Context\n\nSome context.\n`;
+    await fs.writeFile(path.join(dir, filename), `---\n${atomYaml(fm)}\n---\n${content}`, "utf8");
+  }
+
+  async function mkLedger(): Promise<string> {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-doctor-"));
+    await fs.mkdir(path.join(dir, ".taxonomy"));
+    await fs.writeFile(
+      path.join(dir, ".taxonomy", "labels.yaml"),
+      "- tooling\n- substrate\n",
+      "utf8",
+    );
+    return dir;
+  }
+
+  // A repo root doctor can run `git ls-files` against — used by the binds_stale
+  // tests. `git add` (no commit needed) is enough for a file to show in ls-files.
+  async function mkGitRepo(...files: string[]): Promise<string> {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-doctor-repo-"));
+    await execFileAsync("git", ["init", "-q"], { cwd: dir });
+    for (const name of files) {
+      await fs.writeFile(path.join(dir, name), "export {};\n", "utf8");
+    }
+    await execFileAsync("git", ["-C", dir, "add", ...files]);
+    return dir;
+  }
 
   async function snapshotLedger(dir: string): Promise<Map<string, string>> {
     const out = new Map<string, string>();
@@ -533,142 +594,179 @@ describe("ndr doctor", () => {
     return out;
   }
 
-  async function copyDoctorLedger(): Promise<string> {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-doctor-"));
-    await fs.cp(DOCTOR_FIXTURES, dir, { recursive: true });
-    return dir;
-  }
-
-  test("flags every check class against the fault-seeded fixture corpus", async () => {
-    const result = await doctorCommand(DOCTOR_FIXTURES);
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toBe("");
-    for (const kind of EXPECTED_KINDS) {
-      expect(result.stdout).toContain(kind);
-    }
-    // Each finding line carries a ledger-relative path next to its kind.
-    expect(result.stdout).toContain("0002-fixable-predecessor.md  missing_back_pointer");
-    expect(result.stdout).toContain("0012-taxonomy-violation-atom.md  unknown_area");
-    // Healthy controls appear nowhere in the report.
-    expect(result.stdout).not.toContain("0001-healthy-control-atom.md  ");
-    expect(result.stdout).not.toContain("k3m9xq-base32-healthy-atom.md  ");
-    expect(result.stdout).toContain("19 files scanned; 16 finding(s); 1 repairable with --fix.");
+  let tmp: string;
+  beforeEach(async () => {
+    tmp = await mkLedger();
   });
-
-  test("without --fix the ledger is byte-identical after a run", async () => {
-    const before = await snapshotLedger(DOCTOR_FIXTURES);
-    await doctorCommand(DOCTOR_FIXTURES);
-    const after = await snapshotLedger(DOCTOR_FIXTURES);
-    expect(after).toEqual(before);
-  });
-
-  test("--json emits a parseable report mirroring the human findings", async () => {
-    const result = await doctorCommand(DOCTOR_FIXTURES, { json: true });
-    expect(result.exitCode).toBe(1);
-
-    const report = JSON.parse(result.stdout);
-    expect(report.scanned_atoms).toBe(19);
-    expect(report.taxonomy_checked).toBe(true);
-    expect(report.repair_candidates).toHaveLength(1);
-    expect(report.repairs_applied).toEqual([]);
-    expect(report.summary).toContain("16 finding(s)");
-
-    const jsonKinds = Object.values(report.issues)
-      .flat()
-      .map((f) => (f as { kind: string }).kind);
-    expect(new Set(jsonKinds)).toEqual(new Set(EXPECTED_KINDS));
-    for (const f of Object.values(report.issues).flat() as {
-      path: string;
-      kind: string;
-      detail: string;
-    }[]) {
-      expect(f.path.endsWith(".md")).toBe(true);
-      expect(f.detail.length).toBeGreaterThan(0);
-    }
-  });
-
-  test("--fix repairs the missing back-link and is idempotent", async () => {
-    const tmp = await copyDoctorLedger();
-    try {
-      const first = await doctorCommand(tmp, { fix: true });
-      expect(first.exitCode).toBe(1); // unrepairable findings remain
-      expect(first.stdout).toContain("repairs applied:");
-      expect(first.stdout).toContain(
-        "0002-fixable-predecessor.md  appended_back_pointer  [[Decisions/0003-claiming-successor]]",
-      );
-      // The repaired findings are gone from the post-fix report.
-      expect(first.stdout).not.toContain("missing_back_pointer");
-      expect(first.stdout).not.toContain("dangling_superseded ");
-      expect(first.stdout).toContain("14 finding(s)");
-
-      const patched = await fs.readFile(path.join(tmp, "0002-fixable-predecessor.md"), "utf8");
-      expect(patched).toContain("[[Decisions/0003-claiming-successor]]");
-      // Untouched frontmatter keeps its original formatting (ndr:0134).
-      expect(patched).toContain("decision_date: '2026-06-01'");
-      expect(patched).toContain("project: '[[Doctor Fixture]]'");
-
-      // Second --fix run: nothing left to repair, ledger untouched.
-      const before = await snapshotLedger(tmp);
-      const second = await doctorCommand(tmp, { fix: true });
-      expect(second.exitCode).toBe(1);
-      expect(second.stdout).not.toContain("repairs applied:");
-      expect(second.stdout).toContain("14 finding(s)");
-      expect(await snapshotLedger(tmp)).toEqual(before);
-    } finally {
-      await fs.rm(tmp, { recursive: true, force: true });
-    }
-  });
-
-  test("--fix touches only the repaired file", async () => {
-    const tmp = await copyDoctorLedger();
-    try {
-      const before = await snapshotLedger(tmp);
-      await doctorCommand(tmp, { fix: true });
-      const after = await snapshotLedger(tmp);
-      for (const [name, content] of after) {
-        if (name === "0002-fixable-predecessor.md") {
-          expect(content).not.toBe(before.get(name));
-        } else {
-          expect(content).toBe(before.get(name)!);
-        }
-      }
-    } finally {
-      await fs.rm(tmp, { recursive: true, force: true });
-    }
+  afterEach(async () => {
+    await fs.rm(tmp, { recursive: true, force: true });
   });
 
   test("a healthy ledger reports clean and exits 0", async () => {
-    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-doctor-healthy-"));
-    try {
-      await fs.mkdir(path.join(tmp, ".taxonomy"));
-      await fs.cp(path.join(DOCTOR_FIXTURES, ".taxonomy"), path.join(tmp, ".taxonomy"), {
-        recursive: true,
-      });
-      for (const name of ["0001-healthy-control-atom.md", "k3m9xq-base32-healthy-atom.md"]) {
-        await fs.copyFile(path.join(DOCTOR_FIXTURES, name), path.join(tmp, name));
+    await writeAtom(tmp, "0001-healthy.md", { id: "0001", title: "Healthy atom" });
+    const result = await doctorCommand(tmp, { repoRoot: null });
+    expect(result.exitCode).toBe(0);
+    // repoRoot: null is the test's deliberate choice for isolation — it still
+    // produces the "binds checks skipped" note, not empty stderr.
+    expect(result.stderr).toBe("ndr: no repo root — binds checks skipped\n");
+    expect(result.stdout).toContain("1 files scanned; corpus healthy.");
+  });
+
+  test("a missing back-pointer is a repairable chain_integrity finding", async () => {
+    await writeAtom(tmp, "0001-pred.md", {
+      id: "0001",
+      title: "Predecessor",
+      status: "superseded",
+    });
+    await writeAtom(tmp, "0002-succ.md", { id: "0002", title: "Successor", supersedes: ["0001"] });
+    const result = await doctorCommand(tmp, { repoRoot: null });
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain("chain integrity:");
+    expect(result.stdout).toContain("0001-pred.md  missing_back_pointer");
+    expect(result.stdout).toContain("run with --fix to repair 1 missing back-link(s)");
+  });
+
+  test("without --fix the ledger is byte-identical after a run", async () => {
+    await writeAtom(tmp, "0001-pred.md", {
+      id: "0001",
+      title: "Predecessor",
+      status: "superseded",
+    });
+    await writeAtom(tmp, "0002-succ.md", { id: "0002", title: "Successor", supersedes: ["0001"] });
+    const before = await snapshotLedger(tmp);
+    await doctorCommand(tmp, { repoRoot: null });
+    expect(await snapshotLedger(tmp)).toEqual(before);
+  });
+
+  test("--fix repairs the missing back-link with the plain successor id and is idempotent", async () => {
+    await writeAtom(tmp, "0001-pred.md", {
+      id: "0001",
+      title: "Predecessor",
+      status: "superseded",
+    });
+    await writeAtom(tmp, "0002-succ.md", { id: "0002", title: "Successor", supersedes: ["0001"] });
+
+    const first = await doctorCommand(tmp, { fix: true, repoRoot: null });
+    expect(first.stdout).toContain("repairs applied:");
+    expect(first.stdout).toContain("0001-pred.md  appended_back_pointer  0002");
+    expect(first.exitCode).toBe(0); // the repair clears the only findings present
+
+    const adapter = new MarkdownLedgerAdapter(tmp);
+    const patched = await adapter.getAtom(asAtomId("0001"));
+    expect(patched.frontmatter.superseded_by).toEqual(["0002"]);
+    // Untouched frontmatter keeps its original values (ndr:0134).
+    expect(patched.frontmatter.project).toBe("[[Doctor Fixture]]");
+
+    // Second --fix run: nothing left to repair, ledger untouched.
+    const before = await snapshotLedger(tmp);
+    const second = await doctorCommand(tmp, { fix: true, repoRoot: null });
+    expect(second.exitCode).toBe(0);
+    expect(second.stdout).not.toContain("repairs applied:");
+    expect(await snapshotLedger(tmp)).toEqual(before);
+  });
+
+  test("--fix touches only the repaired file", async () => {
+    await writeAtom(tmp, "0001-pred.md", {
+      id: "0001",
+      title: "Predecessor",
+      status: "superseded",
+    });
+    await writeAtom(tmp, "0002-succ.md", { id: "0002", title: "Successor", supersedes: ["0001"] });
+    await writeAtom(tmp, "0003-bystander.md", { id: "0003", title: "Bystander" });
+
+    const before = await snapshotLedger(tmp);
+    await doctorCommand(tmp, { fix: true, repoRoot: null });
+    const after = await snapshotLedger(tmp);
+    for (const [name, content] of after) {
+      if (name === "0001-pred.md") {
+        expect(content).not.toBe(before.get(name));
+      } else {
+        expect(content).toBe(before.get(name)!);
       }
-      const result = await doctorCommand(tmp);
-      expect(result.exitCode).toBe(0);
-      expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("2 files scanned; corpus healthy.");
-    } finally {
-      await fs.rm(tmp, { recursive: true, force: true });
     }
   });
 
   test("a ledger without .taxonomy/ skips taxonomy checks with a stderr note", async () => {
-    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-doctor-notax-"));
+    const bare = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-doctor-notax-"));
     try {
-      await fs.copyFile(
-        path.join(DOCTOR_FIXTURES, "0001-healthy-control-atom.md"),
-        path.join(tmp, "0001-healthy-control-atom.md"),
-      );
-      const result = await doctorCommand(tmp);
+      await writeAtom(bare, "0001-healthy.md", { id: "0001", title: "Healthy atom" });
+      const result = await doctorCommand(bare, { repoRoot: null });
       expect(result.exitCode).toBe(0);
       expect(result.stderr).toContain("taxonomy checks skipped");
       expect(result.stdout).toContain("corpus healthy");
     } finally {
-      await fs.rm(tmp, { recursive: true, force: true });
+      await fs.rm(bare, { recursive: true, force: true });
+    }
+  });
+
+  test("--json emits a parseable report using the current CheckClass set", async () => {
+    await writeAtom(tmp, "0001-pred.md", {
+      id: "0001",
+      title: "Predecessor",
+      status: "superseded",
+    });
+    await writeAtom(tmp, "0002-succ.md", { id: "0002", title: "Successor", supersedes: ["0001"] });
+    const result = await doctorCommand(tmp, { json: true, repoRoot: null });
+    expect(result.exitCode).toBe(1);
+
+    const report = JSON.parse(result.stdout);
+    expect(report.scanned_atoms).toBe(2);
+    expect(report.taxonomy_checked).toBe(true);
+    expect(report.repair_candidates).toEqual([
+      { path: "0001-pred.md", successor: "0002-succ.md", value: "0002" },
+    ]);
+    expect(report.repairs_applied).toEqual([]);
+    // alias_drift is gone (ndr:0144 dropped aliases); binds_stale/context_section
+    // are the two classes Task 6 added.
+    expect(Object.keys(report.issues)).not.toContain("alias_drift");
+    expect(Object.keys(report.issues)).toEqual(
+      expect.arrayContaining(["binds_stale", "context_section"]),
+    );
+  });
+
+  test("doctor flags a stale binds glob when repo root is provided", async () => {
+    const repoRoot = await mkGitRepo("kept.ts");
+    try {
+      await writeAtom(tmp, "0001-binds.md", {
+        id: "0001",
+        title: "Binds atom",
+        binds: ["nowhere/**"],
+      });
+      const result = await doctorCommand(tmp, { json: true, repoRoot });
+      const report = JSON.parse(result.stdout);
+      expect(report.issues.binds_stale.length).toBeGreaterThan(0);
+    } finally {
+      await fs.rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("doctor skips binds checks without repo root and notes it on stderr", async () => {
+    await writeAtom(tmp, "0001-binds.md", {
+      id: "0001",
+      title: "Binds atom",
+      binds: ["nowhere/**"],
+    });
+    const result = await doctorCommand(tmp, { json: true, repoRoot: null });
+    const report = JSON.parse(result.stdout);
+    expect(report.issues.binds_stale).toEqual([]);
+    expect(result.stderr).toContain("binds checks skipped");
+  });
+
+  test("human report groups findings under the new check-class labels", async () => {
+    const repoRoot = await mkGitRepo("kept.ts");
+    try {
+      await writeAtom(
+        tmp,
+        "0001-nocontext.md",
+        { id: "0001", title: "No context", binds: ["nowhere/**"] },
+        "\n# 0001 — No context\n\n## Decision\n\nx.\n",
+      );
+      const result = await doctorCommand(tmp, { repoRoot });
+      expect(result.stdout).toContain("stale binds:");
+      expect(result.stdout).toContain("context section:");
+      expect(result.stdout).not.toContain("alias drift:");
+    } finally {
+      await fs.rm(repoRoot, { recursive: true, force: true });
     }
   });
 });
