@@ -3,9 +3,6 @@ import { FrontmatterSchema, type Frontmatter } from "./schema.ts";
 declare const AtomIdBrand: unique symbol;
 export type AtomId = string & { readonly [AtomIdBrand]: true };
 
-declare const SlugBrand: unique symbol;
-export type Slug = string & { readonly [SlugBrand]: true };
-
 // Atom ids come in two shapes, both accepted forever (ndr:0144):
 //   - legacy `^\d{4}$` — the ~130 sequential ids minted before the scheme change.
 //   - new `^[0-9a-z]{6}$` — locally-generated short Crockford base32, no backfill.
@@ -39,33 +36,18 @@ export function generateAtomId(): AtomId {
   return out as AtomId;
 }
 
-// Pull the atom-id out of a `[[Decisions/0042-some-title]]` wikilink (either id
-// shape). Returns null when the link tail doesn't start with a recognizable id.
-export function extractAtomIdFromWikilink(link: string): AtomId | null {
-  const cleaned = link.replace(/^\[\[|\]\]$/g, "");
+// Pull the atom-id out of a reference. Accepts the new plain-id form ("0072")
+// and the legacy wikilink form ("[[Decisions/0042-some-title]]") — migration
+// and doctor still read pre-migration corpora. Returns null when no
+// recognizable id is present.
+export function extractAtomIdFromRef(ref: string): AtomId | null {
+  const cleaned = ref.replace(/^\[\[|\]\]$/g, "");
   const tail = cleaned.split("/").pop() ?? cleaned;
   const m = /^(\d{4}|[0-9a-z]{6})(?:-|$)/.exec(tail);
   return m ? asAtomId(m[1]!) : null;
 }
 
-// Slugs are stored in `aliases:` with an `ndr-` namespace prefix (ndr:0050),
-// but referenced without it (`ndr:#monorepo-shape`, ndr:0049). Normalize the
-// prefix away on both sides so either form matches.
-export function normalizeSlug(value: string): string {
-  return value.toLowerCase().replace(/^ndr-/, "");
-}
-
-export function asSlug(value: string): Slug {
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(value)) {
-    throw new Error(`Invalid Slug: ${JSON.stringify(value)} (want kebab-case)`);
-  }
-  return value as Slug;
-}
-
-export type Reference =
-  | { grain: "atom-id"; id: AtomId }
-  | { grain: "slug"; slug: Slug }
-  | { grain: "topic"; area: string; topic: string };
+export type Reference = { grain: "atom-id"; id: AtomId } | { grain: "label"; label: string };
 
 export interface Atom {
   readonly frontmatter: Frontmatter;
