@@ -94,7 +94,7 @@ Build a scope picture from whatever signals are available:
   that is the project; the same file pins the ledger, so the CLI calls
   below automatically resolve against the right corpus. No probing
   needed. Without one, leave project unset.
-- `area` / `topic` words — from `$ARGUMENTS` or from recent context
+- `label` words — from `$ARGUMENTS` or from recent context
   (files just edited, files the user named). `src/auth/` → `auth`,
   `migrations/` → `migrations`.
 - `ref` — if `$ARGUMENTS` matches an `ndr:` reference, use it directly.
@@ -107,8 +107,8 @@ Pick the strongest signal, in priority order:
 
 | Signal | Command |
 | --- | --- |
-| `ndr:` ref (atom-id, `#slug`, `area/topic`) | `ndr resolve '<ref>'` |
-| area (± topic) word matching taxonomy | `ndr current --area <area> [--topic <topic>] --verbose` |
+| `ndr:` ref (atom-id, `label`) | `ndr resolve '<ref>'` |
+| label word matching taxonomy | `ndr current --label <label> --verbose` |
 | 1–3 concrete search terms | `ndr search '<terms>' --verbose` |
 | fuzzy scope needing judgment/synthesis | dispatch `@ndr-reader` (payload below) |
 
@@ -146,8 +146,9 @@ If heads came back:
 - **Batch (3+ heads):** present as a compact table of titles + atom-ids
   + `ndr:` refs, with a one-line invitation: "Pull any of these into the
   working context? (1-N, all, skip)".
-- **Full body when it matters** — the default brief is gist-only; Why /
-  Alternatives / Consequences / `## Assumptions` are omitted (ndr:0136).
+- **Full body when it matters** — the default brief is gist-only;
+  `## Scope` / `## Commitments` / `## Revisit if` / `## Context` /
+  `## Why` / `## Alternatives` are omitted (ndr:0136).
   When a head's reasoning or revisit conditions plausibly bear on the edit
   at hand, pull its complete body with `ndr resolve <ref> --full` (or
   `ndr show <atom-id>` for one specific atom) — do **not** open the ledger
@@ -172,11 +173,11 @@ the ledger itself.
 ### Single relevant head
 
 ```markdown
-**NDR grounding** (`auth` in `[[Apex]]`):
+**NDR grounding** (`auth` in `Apex`):
 
 Auth substrate = Okta + custom session middleware (0042-okta-session-substrate)
-  area: auth, topic: substrate, decision: 2026-04-18
-  reversibility: hard
+  labels: [auth, substrate], decision: 2026-04-18
+  conviction: strong
 
 <gist as emitted by the CLI>
 
@@ -184,13 +185,10 @@ Lineage: 0030 → 0042
 
 References:
   - ndr:0042
-  - ndr:#auth-substrate
-  - ndr:auth/substrate
+  - ndr:auth
+  - ndr:substrate
 
-⚠ Assumption to revisit: shared-okta-tenant — assumes the company-wide
-  Okta tenant covers this product surface.
-  Revisit if: this product surface moves to a tenant outside the company.
-  Current state: still on the shared tenant.
+⚠ Revisit if: this product surface moves to a tenant outside the company.
 ```
 
 ### Multiple heads (batch)
@@ -200,9 +198,9 @@ References:
 
 | Atom | Title | Ref |
 |---|---|---|
-| 0011 | Monorepo, symmetric apps layout | ndr:#monorepo-shape |
+| 0011 | Monorepo, symmetric apps layout | ndr:0011 |
 | 0013 | Python packaging in monorepo | ndr:0013 |
-| 0021 | Per-app CI builders, shared cache | ndr:#ci-strategy |
+| 0021 | Per-app CI builders, shared cache | ndr:0021 |
 
 Pull any of these into the working context? (1-N, all, skip)
 ```
@@ -218,7 +216,7 @@ No NDR coverage for `marketing-site` repo. Proceeding without grounding.
 1. **The CLI owns the walk.** Never `Read` an atom file directly, even
    when a ticket body or prior chat names specific atom IDs —
    `ndr resolve` returns the head and surfaces drift. When you need a
-   head's full body (assumptions, consequences, reasoning), get it from
+   head's full body (commitments, revisit conditions, reasoning), get it from
    the CLI — `ndr resolve <ref> --full` or `ndr show <atom-id>` — not by
    opening the file (step 3).
 2. **Don't surface superseded atoms.** The CLI never returns one as a
@@ -242,7 +240,7 @@ No NDR coverage for `marketing-site` repo. Proceeding without grounding.
 - `ndr resolve` / `ndr search` / `ndr current` — the CLI surface this
   skill drives (ndr:0129; brief format pinned by ndr:0136).
 - `@ndr-reader` — fuzzy-scope search + synthesis worker.
-- `/decisions <ref-or-topic>` — user-facing slash command for explicit
+- `/decisions <ref-or-query>` — user-facing slash command for explicit
   queries with a topic or ref in hand.
 - `/capture-decision` — the write-side companion. Ground first, then
   capture if the conversation produces a new decision.
