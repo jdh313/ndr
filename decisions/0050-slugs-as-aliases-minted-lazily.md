@@ -3,26 +3,20 @@ id: "0050"
 title: "NDR slugs live in atom aliases: frontmatter, minted lazily on demand"
 status: current
 decision_date: 2026-05-15
-
-project: '[[ndr]]'
-
-derived_from:
-  - "[[Decisions/0049-ndr-reference-scheme-three-grains]]"
-informed_by:
-  - "[[Decisions/0007-mvp-substrate-markdown]]"
+author: Jacob Hoehler
+conviction: tentative
+project: ndr
+labels:
+  - tooling
+  - referencing
+  - meta-chain
+binds: []
 supersedes: []
 superseded_by: []
-
-area: tooling
-topic: referencing
-impacts: []
-
-revisit_triggers: []
-
-reversibility: medium
-tags:
-  - decision
-  - meta-chain
+derived_from:
+  - Decisions/0049-ndr-reference-scheme-three-grains
+informed_by:
+  - "0007"
 ---
 
 # 0050 — NDR slugs live in atom aliases: frontmatter, minted lazily on demand
@@ -35,24 +29,21 @@ A slug is a string in the atom's `aliases:` YAML frontmatter field, namespaced w
 
 Obsidian's native alias mechanism makes `[[ndr-monorepo-shape]]` wikilinks resolve to the atom carrying that alias — no plugin dependency. Lazy minting sidesteps the taxonomy-drift hazard of inventing slugs per-atom upfront.
 
-> [!info]- Full reasoning
-> Using `aliases:` over a separate registry file keeps the substrate to "markdown files" (0007) — no second source of truth. The `ndr-` namespace prefix avoids alias collisions with non-NDR vault notes. Lazy minting means slug invention happens at the moment a reference need exists, not speculatively, which avoids the same taxonomy-drift trap that `area:`/`topic:` would hit if those were invented eagerly.
+Using `aliases:` over a separate registry file keeps the substrate to "markdown files" (0007) — no second source of truth. The `ndr-` namespace prefix avoids alias collisions with non-NDR vault notes. Lazy minting means slug invention happens at the moment a reference need exists, not speculatively, which avoids the same taxonomy-drift trap that `area:`/`topic:` would hit if those were invented eagerly.
 
 ## Assumptions
 
 `obsidian-aliases-survive-handover` · `lazy-minting-fires-on-time`
 
-> [!warning]- obsidian-aliases-survive-handover
-> Moving an alias between atoms at write-time keeps Obsidian's alias index in sync, so `[[ndr-monorepo-shape]]` resolves to the new atom after supersession.
->
-> - **Current state:** native Obsidian alias mechanism is stable; cross-plugin behavior (Bases, dataview) less verified
-> - **Revisit if:** the first real supersession-with-slug breaks resolution in any consumer
+Moving an alias between atoms at write-time keeps Obsidian's alias index in sync, so `[[ndr-monorepo-shape]]` resolves to the new atom after supersession.
 
-> [!warning]- lazy-minting-fires-on-time
-> Writers will mint a slug when external reference is first needed, not after the ref already exists and has gone stale.
->
-> - **Current state:** untested; depends on supersede-skill prompting for slug minting
-> - **Revisit if:** refs accumulate without slugs and the supersession trap re-surfaces
+- **Current state:** native Obsidian alias mechanism is stable; cross-plugin behavior (Bases, dataview) less verified
+- **Revisit if:** the first real supersession-with-slug breaks resolution in any consumer
+
+Writers will mint a slug when external reference is first needed, not after the ref already exists and has gone stale.
+
+- **Current state:** untested; depends on supersede-skill prompting for slug minting
+- **Revisit if:** refs accumulate without slugs and the supersession trap re-surfaces
 
 ## Consequences
 

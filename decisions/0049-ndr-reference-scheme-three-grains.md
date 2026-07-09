@@ -3,27 +3,21 @@ id: "0049"
 title: "NDR references use ndr: prefix with three grains — atom-id, slug, topic"
 status: current
 decision_date: 2026-05-15
-
-project: '[[ndr]]'
-
-derived_from:
-  - "[[Personal/Projects/Decision Pipeline — Reference Addressability]]"
-informed_by:
-  - "[[Decisions/0006-readside-decisions-skill]]"
-  - "[[Decisions/0008-decisions-atomic]]"
+author: Jacob Hoehler
+conviction: tentative
+project: ndr
+labels:
+  - tooling
+  - referencing
+  - meta-chain
+binds: []
 supersedes: []
 superseded_by: []
-
-area: tooling
-topic: referencing
-impacts: []
-
-revisit_triggers: []
-
-reversibility: medium
-tags:
-  - decision
-  - meta-chain
+derived_from:
+  - Personal/Projects/Decision Pipeline — Reference Addressability
+informed_by:
+  - "0006"
+  - "0008"
 ---
 
 # 0049 — NDR references use ndr: prefix with three grains — atom-id, slug, topic
@@ -36,24 +30,21 @@ External and internal references to NDRs use a single `ndr:` prefix with three r
 
 NDR references are bi-temporal: a writer may mean "the atom that justified this code" or "the decision that currently governs this code." Forcing one reference form to do both jobs is what makes ADR-NNNN refs go stale on supersession.
 
-> [!info]- Full reasoning
-> The dominant industry pattern (ADR-NNNN inline) collapses historical anchor and current governance into one identifier; supersession breaks that collapse. Atomicity (0008) creates the atom-vs-concept split, so the reference scheme has to bridge it. Three grains let the writer pick intent at write-time: id for history, slug for atom-grain governance, topic for area-grain governance. Same prefix, same resolver, same skill.
+The dominant industry pattern (ADR-NNNN inline) collapses historical anchor and current governance into one identifier; supersession breaks that collapse. Atomicity (0008) creates the atom-vs-concept split, so the reference scheme has to bridge it. Three grains let the writer pick intent at write-time: id for history, slug for atom-grain governance, topic for area-grain governance. Same prefix, same resolver, same skill.
 
 ## Assumptions
 
 `three-grain-split-is-load-bearing` · `prefix-collision-is-acceptable`
 
-> [!warning]- three-grain-split-is-load-bearing
-> Writers will use more than one form in practice — refs aren't all atom-id or all topic.
->
-> - **Current state:** untested; first real test is the Wayfinder 184-ref backfill
-> - **Revisit if:** triage shows the mix is overwhelmingly one form (then collapse to that form)
+Writers will use more than one form in practice — refs aren't all atom-id or all topic.
 
-> [!warning]- prefix-collision-is-acceptable
-> The `ndr:` prefix doesn't collide with other reference schemes in repos under management.
->
-> - **Current state:** no known collisions in Wayfinder
-> - **Revisit if:** a tracked project already uses `ndr:` for something else
+- **Current state:** untested; first real test is the Wayfinder 184-ref backfill
+- **Revisit if:** triage shows the mix is overwhelmingly one form (then collapse to that form)
+
+The `ndr:` prefix doesn't collide with other reference schemes in repos under management.
+
+- **Current state:** no known collisions in Wayfinder
+- **Revisit if:** a tracked project already uses `ndr:` for something else
 
 ## Consequences
 

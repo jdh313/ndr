@@ -1,0 +1,24 @@
+# Labels — merged from areas.yaml + topics.yaml + corpus tags by `ndr migrate`.
+- architecture
+- ci-strategy
+- commit-convention
+- data-modelling
+- deployment
+- discipline
+- file-organization
+- framework
+- granularity
+- lint-format
+- meta-chain
+- mvp-scope
+- process
+- read-side
+- referencing
+- repo-shape
+- scope
+- substrate
+- supersession
+- test-method
+- tool-routing
+- tooling
+- write-side
