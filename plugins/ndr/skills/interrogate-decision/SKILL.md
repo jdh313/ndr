@@ -76,11 +76,11 @@ Honest pros/cons for the chosen path and each genuine alternative — concrete, 
 
 ### Step 5 — The asymmetry (Move 5)
 
-Which direction is cheaper to be wrong in? Recovery cost of a wrong chosen-path vs. a wrong rejection. This *is* the justification for the atom's `reversibility:` field — capture it so the field isn't a guess. Name the escape valve when the asymmetry is stark. Note when the asymmetry flips the recommendation.
+Which direction is cheaper to be wrong in? Recovery cost of a wrong chosen-path vs. a wrong rejection. This *is* the source material for a `## Commitments` bullet when the recovery cost is asymmetric enough to bind future work, and it informs the atom's `conviction:` rating. Name the escape valve when the asymmetry is stark. Note when the asymmetry flips the recommendation.
 
 ### Step 6 — Failure modes and composition (Move 6)
 
-How does the chosen path break, and what's the early-warning sign (→ future `## Assumptions` revisit triggers)? What does it compose with? **Run `ndr search '<terms>'` / `ndr current --area <area> --verbose` here** to surface neighboring heads. A candidate that contradicts a `current` head is a supersession, not a fresh capture — flag it now.
+How does the chosen path break, and what's the early-warning sign (→ future `## Revisit if` conditions)? What does it compose with? **Run `ndr search '<terms>'` / `ndr current --label <label> --verbose` here** to surface neighboring heads. A candidate that contradicts a `current` head is a supersession, not a fresh capture — flag it now.
 
 ### Step 7 — Forward-looking bind check (Move 7)
 
@@ -96,7 +96,7 @@ Synthesize 1–7 into one verdict using the routing table in `interrogation.md`:
 
 ### Step 10 — Hand off (only if the user confirms new NDR / amend / supersede)
 
-- **New NDR or supersede** → invoke `/capture-decision`, passing the candidate plus what the interrogation produced: the fork and alternatives (Step 2), the first-principle rationale (Step 3), the `reversibility:` justification (Step 5), the revisit triggers (Step 6), and — for a supersession — the predecessor head's `ndr:` ref to populate `supersedes:`. `/capture-decision` owns drafting, review, id assignment, and the `ndr capture` write.
+- **New NDR or supersede** → invoke `/capture-decision`, passing the candidate plus what the interrogation produced: the fork and alternatives (Step 2), the first-principle rationale (Step 3), the `conviction:` rating and any `## Commitments` bullet (Step 5), the `## Revisit if` conditions (Step 6), and — for a supersession — the predecessor head's `ndr:` ref to populate `supersedes:`. `/capture-decision` owns drafting, review, id assignment, and the `ndr capture` write.
 - **Amend a head** → the change refines an existing head's body without reversing it. Surface the head's path (from the `ndr` brief) and the specific edit; the user applies it directly. This is a body edit, not a new atom — no supersession.
 - **Merge / code-comment / CLAUDE.md / skip** → no capture. State where the content goes (existing `ndr:` ref, code site, doc) and stop.
 
@@ -114,7 +114,7 @@ Never call `ndr capture` from this skill. The handoff is to `/capture-decision`,
    responsibilities" → separate skill falls out as a corollary.
 4. Tradeoffs: standalone adds a surface to maintain; folding bloats the thin orchestrator.
 5. Asymmetry: wrong-to-split is cheap (merge later); wrong-to-fold is expensive
-   (capture-decision stops being thin). → favors split. reversibility: easy.
+   (capture-decision stops being thin). → favors split. conviction: strong.
 6. Failure mode: skill drifts from capture-decision's contract. Composes with worthiness.md
    (shares the routing buckets). No contradicting head — ndr search returned nothing.
 7. Forward-bind: yes — constrains where future pre-capture logic lives. Binds.
