@@ -1,128 +1,70 @@
-import { expect, test, describe } from "bun:test";
-import { promises as fs } from "node:fs";
-import path from "node:path";
+import { describe, expect, test } from "bun:test";
 
 import { FrontmatterSchema } from "./schema.ts";
-import { splitFrontmatter } from "../adapters/markdown/fence.ts";
-import { parseFrontmatterYaml } from "../adapters/markdown/yaml.ts";
 
-const FIXTURES_DIR = path.resolve(import.meta.dir, "../../test/fixtures/ledger");
+const valid = {
+  id: "0042",
+  title: "Use FastAPI for the auth service",
+  status: "current",
+  decision_date: "2026-05-14",
+  author: "Jacob Hoehler",
+  conviction: "tentative",
+  project: "ndr",
+  labels: ["write-side", "taxonomy"],
+  binds: ["src/adapters/**"],
+  supersedes: [],
+  superseded_by: [],
+  derived_from: [],
+  informed_by: [],
+};
 
 describe("FrontmatterSchema", () => {
-  test("validates 5+ real vault atoms in fixtures", async () => {
-    const files = (await fs.readdir(FIXTURES_DIR)).filter((f) => f.endsWith(".md"));
-    expect(files.length).toBeGreaterThanOrEqual(5);
-    for (const file of files) {
-      const raw = await fs.readFile(path.join(FIXTURES_DIR, file), "utf8");
-      const { yaml } = splitFrontmatter(raw);
-      const { data } = parseFrontmatterYaml(yaml);
-      const result = FrontmatterSchema.safeParse(data);
-      if (!result.success) {
-        throw new Error(
-          `Fixture ${file} failed validation:\n${result.error.issues
-            .map((i) => `  ${i.path.join(".")}: ${i.message}`)
-            .join("\n")}`,
-        );
-      }
-    }
+  test("accepts a fully-populated new-format atom", () => {
+    const r = FrontmatterSchema.safeParse(valid);
+    expect(r.success).toBe(true);
   });
 
-  test("rejects an unquoted integer id (atom files must quote the id)", () => {
-    // YAML parses `id: 0128` as the number 128; the schema must reject it so
-    // the atom file is fixed (quoted) rather than silently mis-parsed.
-    const result = FrontmatterSchema.safeParse({
-      id: 128,
-      title: "x",
-      status: "current",
-      decision_date: "2026-01-01",
-      project: "[[X]]",
-      supersedes: [],
-      area: "tooling",
-      topic: "framework",
-      reversibility: "easy",
-    });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      const idIssue = result.error.issues.find((i) => i.path[0] === "id");
-      expect(idIssue).toBeDefined();
-    }
+  test("defaults binds, derived_from, informed_by, superseded_by to []", () => {
+    const { binds, derived_from, informed_by, superseded_by, ...rest } = valid;
+    const r = FrontmatterSchema.parse(rest);
+    expect(r.binds).toEqual([]);
+    expect(r.derived_from).toEqual([]);
+    expect(r.informed_by).toEqual([]);
+    expect(r.superseded_by).toEqual([]);
   });
 
-  test("rejects id without leading zeros", () => {
-    const result = FrontmatterSchema.safeParse({
-      id: "42",
-      title: "x",
-      status: "current",
-      decision_date: "2026-01-01",
-      project: "[[X]]",
-      supersedes: [],
-      area: "tooling",
-      topic: "framework",
-      reversibility: "easy",
-    });
-    expect(result.success).toBe(false);
+  test("rejects missing author", () => {
+    const { author, ...rest } = valid;
+    expect(FrontmatterSchema.safeParse(rest).success).toBe(false);
   });
 
-  test("rejects missing supersedes field", () => {
-    const result = FrontmatterSchema.safeParse({
-      id: "0001",
-      title: "x",
-      status: "current",
-      decision_date: "2026-01-01",
-      project: "[[X]]",
-      area: "tooling",
-      topic: "framework",
-      reversibility: "easy",
-    });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      const issue = result.error.issues.find((i) => i.path[0] === "supersedes");
-      expect(issue).toBeDefined();
-    }
+  test("rejects unknown conviction value", () => {
+    expect(FrontmatterSchema.safeParse({ ...valid, conviction: "medium" }).success).toBe(false);
   });
 
-  test("accepts empty supersedes", () => {
-    const result = FrontmatterSchema.safeParse({
-      id: "0001",
-      title: "x",
-      status: "current",
-      decision_date: "2026-01-01",
-      project: "[[X]]",
-      supersedes: [],
-      area: "tooling",
-      topic: "framework",
-      reversibility: "easy",
-    });
-    expect(result.success).toBe(true);
+  test("rejects empty labels list", () => {
+    expect(FrontmatterSchema.safeParse({ ...valid, labels: [] }).success).toBe(false);
   });
 
-  test("rejects bad status enum", () => {
-    const result = FrontmatterSchema.safeParse({
-      id: "0001",
-      title: "x",
-      status: "active",
-      decision_date: "2026-01-01",
-      project: "[[X]]",
-      supersedes: [],
-      area: "tooling",
-      topic: "framework",
-      reversibility: "easy",
-    });
-    expect(result.success).toBe(false);
+  test("rejects more than 4 labels", () => {
+    const labels = ["a", "b", "c", "d", "e"];
+    expect(FrontmatterSchema.safeParse({ ...valid, labels }).success).toBe(false);
   });
 
-  test("rejects bad reversibility enum", () => {
-    const result = FrontmatterSchema.safeParse({
-      id: "0001",
-      title: "x",
-      status: "current",
-      decision_date: "2026-01-01",
-      project: "[[X]]",
-      supersedes: [],
-      area: "tooling",
-      topic: "framework",
-      reversibility: "irreversible",
-    });
-    expect(result.success).toBe(false);
+  test("supersedes entries must be atom ids, not wikilinks", () => {
+    const bad = { ...valid, supersedes: ["[[Decisions/0072-old-atom]]"] };
+    expect(FrontmatterSchema.safeParse(bad).success).toBe(false);
+    const good = { ...valid, supersedes: ["0072"] };
+    expect(FrontmatterSchema.safeParse(good).success).toBe(true);
+  });
+
+  test("rejects unquoted numeric id (ndr:0139)", () => {
+    expect(FrontmatterSchema.safeParse({ ...valid, id: 42 }).success).toBe(false);
+  });
+
+  test("rejects removed legacy fields via strict mode", () => {
+    expect(FrontmatterSchema.safeParse({ ...valid, reversibility: "easy" }).success).toBe(false);
+    expect(FrontmatterSchema.safeParse({ ...valid, area: "tooling" }).success).toBe(false);
+    expect(FrontmatterSchema.safeParse({ ...valid, aliases: [] }).success).toBe(false);
   });
 });
