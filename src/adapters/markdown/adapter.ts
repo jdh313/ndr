@@ -190,9 +190,9 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort, DoctorPort {
     const id = draft.frontmatter.id ?? (await this.mintFreshId());
     const parsed = this.validateDraft(withCaptureDefaults({ ...draft.frontmatter, id }));
 
-    // 2. Taxonomy gate — area and topic must be in the on-disk taxonomy (ndr:0144
+    // 2. Taxonomy gate — labels must be in the on-disk taxonomy (ndr:0144
     //    keeps the human axis in slugs/taxonomy now that ids are opaque).
-    await this.assertTaxonomy(parsed.area, parsed.topic);
+    await this.assertTaxonomy(parsed.labels);
 
     // 3. Pre-flight every predecessor before touching disk: a dangling reference is
     //    exit 1, an already-superseded predecessor is a clean exit-2 refusal. No
@@ -261,17 +261,11 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort, DoctorPort {
     return result.data;
   }
 
-  private async assertTaxonomy(area: string, topic: string): Promise<void> {
-    const dir = path.join(this.ledger, ".taxonomy");
-    const areas = await this.readTaxonomyList(path.join(dir, "areas.yaml"));
-    const topics = await this.readTaxonomyList(path.join(dir, "topics.yaml"));
-    const errors: string[] = [];
-    if (!areas.includes(area)) {
-      errors.push(`area \`${area}\` not in taxonomy areas [${areas.join(", ")}]`);
-    }
-    if (!topics.includes(topic)) {
-      errors.push(`topic \`${topic}\` not in taxonomy topics [${topics.join(", ")}]`);
-    }
+  private async assertTaxonomy(labels: readonly string[]): Promise<void> {
+    const known = await this.readTaxonomyList(path.join(this.ledger, ".taxonomy", "labels.yaml"));
+    const errors = labels
+      .filter((l) => !known.includes(l))
+      .map((l) => `label \`${l}\` not in taxonomy labels [${known.join(", ")}]`);
     if (errors.length > 0) throw new DraftValidationError(errors);
   }
 
@@ -494,11 +488,9 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort, DoctorPort {
   // write), a missing or unreadable taxonomy here returns null so the sweep
   // proceeds with taxonomy checks skipped.
   async readTaxonomy(): Promise<Taxonomy | null> {
-    const dir = path.join(this.ledger, ".taxonomy");
     try {
       return {
-        areas: await this.readTaxonomyList(path.join(dir, "areas.yaml")),
-        topics: await this.readTaxonomyList(path.join(dir, "topics.yaml")),
+        labels: await this.readTaxonomyList(path.join(this.ledger, ".taxonomy", "labels.yaml")),
       };
     } catch (err) {
       if (err instanceof DraftValidationError) return null;
