@@ -51,9 +51,19 @@ Parse `$ARGUMENTS`. If empty, ask the user (do not default silently).
 
 Standard resolution, mirroring the CLI's own walk-up: if a `.ndr.toml` exists between the repo root and the filesystem root, use its `ledger` value (relative paths resolve against that file's directory, `~/` expands); otherwise stop and tell the user to run `ndr init` (the CLI itself errors without a config). Pass the resolved path to the agent so it can supply `--ledger` on every CLI call, including `ndr resolve <atom-id> --full` for full bodies.
 
-### 3. Detect repo area hint (optional)
+### 3. Detect repo label hint (optional)
 
-If a `CLAUDE.md` or `.claude/CLAUDE.md` exists in the repo, scan for any explicit hint about which `area:` values are relevant (e.g. "this repo's decisions live under `area: tooling`"). If found, pass as `area_filter` to the agent. Otherwise audit all heads — false positives are tolerable; missed drift is not.
+If a `CLAUDE.md` or `.claude/CLAUDE.md` exists in the repo, scan for any explicit hint about which `labels:` values are relevant (e.g. "this repo's decisions live under label `tooling`"). If found, pass as `label_filter` to the agent. Otherwise audit all heads — false positives are tolerable; missed drift is not.
+
+### 3b. Pass the changed-file set for binds ranking
+
+The `ndr-drift-auditor` ranks candidate atoms by `binds:` glob overlap against the
+diff (ndr:binds semantics). Include the changed-file list in the dispatch payload
+as `"changed_files"` so the auditor can select and rank candidates by which atoms'
+`binds:` globs match the diff, rather than by label filter alone. The auditor also
+splits **contradiction** (code conflicts with a decision — a finding) from
+**absence** (decided-but-not-yet-built code — not a finding); expect absence hits
+to be excluded from the returned `divergences`.
 
 ### 4. Dispatch the agent
 
@@ -67,7 +77,8 @@ Invoke `ndr-drift-auditor` with:
     "ref": "<resolved ref or null>"
   },
   "repo_path": ".",
-  "area_filter": "<optional area>"
+  "label_filter": "<optional label>",
+  "changed_files": ["<file>", "..."]
 }
 ```
 
@@ -123,7 +134,7 @@ Never auto-apply. The skill's job ends at the punch list plus next-step suggesti
 
 ## When NOT to use this skill
 
-- **Corpus health checks** (orphan back-pointers, alias conflicts, taxonomy violations, missing required fields, malformed files) — `ndr doctor` via `ndr-curator` instead.
+- **Corpus health checks** (orphan back-pointers, taxonomy violations, stale binds, missing context sections, missing required fields, malformed files) — `ndr doctor` via `ndr-curator` instead.
 - **Reading a single decision** — use `/decisions <ref-or-topic>`.
 - **Writing a new decision** — use `/capture-decision`.
 - **Style or lint drift** — that's a linter, not an ndr concern.
