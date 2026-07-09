@@ -80,8 +80,8 @@ ndr resolve 0049 --ledger ./test/fixtures/ledger
 # Label grain — list every current head carrying a taxonomy label
 ndr resolve framework --ledger ./test/fixtures/ledger
 
-# --full — the resolved head's complete body (Decision / Consequences /
-# Assumptions), not just the one-line gist; still walks supersession
+# --full — the resolved head's complete body (Decision / Scope / Commitments /
+# Revisit if / Context / Why / Alternatives), not just the gist; still walks supersession
 ndr resolve 0070 --full
 
 # show — one specific atom's full raw markdown, frozen (no supersession walk).
