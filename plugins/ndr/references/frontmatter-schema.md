@@ -1,169 +1,130 @@
 # Frontmatter schema
 
-Canonical YAML spec for decision atoms. Required fields are starred. The capture skill refuses to write if any required field is missing.
+Canonical YAML spec for decision atoms. The `ndr capture` CLI validates every
+write against a strict Zod schema and refuses to persist if any required field is
+missing or an unknown field is present.
 
 ## Example
 
 ```yaml
 ---
-# Identity
-id: "0042"                            # *auto-assigned by `ndr capture`; OMIT from drafts. Shown here as the on-disk form. Quoted to preserve leading zeros.
-title: "Use FastAPI for the auth service"  # *short imperative phrase
-status: current                       # *enum: current | superseded | retracted
-decision_date: 2026-05-14             # *ISO date
-aliases: []                           # optional; atom-grain slugs for external reference. Use `ndr-` prefix. Minted lazily; moved to successor on supersession
+id: "0042"                 # auto-minted by `ndr capture`; OMIT from drafts. Quoted to preserve leading zeros.
+title: "Use FastAPI for the auth service"   # short imperative phrase
+status: current            # current | superseded | retracted
+decision_date: 2026-05-14  # ISO date the decision was made
+author: Jacob Hoehler      # auto-filled from `git config user.name`; OMIT from drafts
+conviction: tentative      # strong | tentative | arbitrary. Required, no default.
 
-# Membership
-project: "[[Auth Rewrite]]"   # *single wikilink; what project / initiative this decision belongs to
+project: ndr               # plain string naming the project
 
-# Lineage (all wikilinks to vault paths)
-derived_from:                         # the rich source — chat, mull, prior decision
-  - "[[Mulling/2026-05-14_decision-capture-pipeline]]"
-informed_by:                          # other decisions that shaped this one (no supersession semantics)
-  - "[[Decisions/0017-postgres-only]]"
-supersedes: []                        # *REQUIRED present (may be empty); non-empty if this revises
-superseded_by: []                     # back-pointer; filled when a successor lands
+labels:                    # 1-4 values from <ledger>/.taxonomy/labels.yaml
+  - write-side
+  - taxonomy
+binds:                     # optional; repo-relative glob patterns (Bun.Glob syntax)
+  - "src/adapters/**"
 
-# Impact
-area: tooling                         # *single value from taxonomy/areas.yaml
-topic: substrate                      # *single value from taxonomy/topics.yaml
-impacts:                              # wikilinks to architecture pages, repo notes, code refs, design docs
-  - "[[Reference/Developer/FastAPI Decision]]"
-  - "[[Auth Rewrite]]"
-
-# Revisit
-revisit_triggers: []                  # free-text triggers ("quarterly perf review")
-
-# Classification
-reversibility: medium                 # *enum: easy | medium | hard
-tags:
-  - decision
+supersedes: []             # plain atom ids; present even when empty
+superseded_by: []          # back-pointer, patched by capture on the predecessor
+derived_from: []           # free-form refs: PR URL, transcript path, mull note
+informed_by: []            # plain atom ids; no supersession semantics
 ---
 ```
 
 ## Field reference
 
-### Identity
-
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `id` | string (4-digit zero-padded legacy, or 6-char base32) | yes (on disk) | Auto-assigned by `ndr capture`. **Omit from drafts** — a draft that emits an `id` (even a placeholder string) fails validation; the CLI mints when the field is absent. Quote it so `"0042"` doesn't get coerced to int `42` |
-| `title` | string | yes | Short imperative phrase |
-| `status` | enum | yes | `current`, `superseded`, `retracted` |
-| `decision_date` | ISO date | yes | When the decision was made, not when the atom was written |
-| `aliases` | list[string] | no | Lazy-minted slugs for atom-grain external reference. Use `ndr-` namespace prefix (e.g., `ndr-monorepo-shape`). Each slug must be unique vault-wide. Slug is **moved to the successor** on supersession — see Hard rule 3. Most atoms never carry a slug |
+| `id` | string (4-digit legacy, or 6-char base32) | yes (on disk) | Auto-minted by `ndr capture`. **Omit from drafts** — a draft that emits an `id` fails validation. Quote it so `"0042"` isn't coerced to int `42`. |
+| `title` | string | yes | Short imperative phrase. |
+| `status` | enum | yes | `current` \| `superseded` \| `retracted`. current/superseded are the supersession chain; retracted withdraws a decision without a fake successor. |
+| `decision_date` | ISO date | yes | When decided, not when the atom was written. |
+| `author` | string | yes | The human on whose behalf capture ran — never "Claude"; the agent is a pen, not an author. **Auto-filled** by `ndr capture` from `git config user.name`; omit from drafts. |
+| `conviction` | enum | yes | `strong` (would defend; superseding needs new evidence) \| `tentative` (best call with what we knew) \| `arbitrary` (a fork needed an answer; supersede freely). Required with no default — a default invites never thinking about it. |
+| `project` | string | yes | Plain string naming the project (was a wikilink). |
+| `labels` | list[string], 1-4 | yes | Values from `<ledger>/.taxonomy/labels.yaml`. Hard-gated at capture, advisory at doctor. Replaces `area` + `topic` + `tags`. Adding a value is a data edit (edit the file), not a deploy. |
+| `binds` | list[string] | no | Repo-relative glob patterns (`Bun.Glob` syntax) naming the code this decision governs. Consumed by `drift-check` (diff -> candidate atoms) and `/ground` (rank heads by overlap). Advisory routing signal, never an exclusive filter. Convention: bind directories/layers, not files. Capture validates glob syntax only. |
+| `supersedes` | list[atom-id] | **yes (presence)** | Plain atom ids (`["0072"]`). Must be present even when empty — the structural signal the author considered supersession. If non-empty, this decision revises the named one(s). |
+| `superseded_by` | list[atom-id] | no | Back-pointer, patched onto the predecessor by capture in the same operation. |
+| `derived_from` | list[string] | no | Free-form refs to the rich source: PR URL, transcript path, mull note path. |
+| `informed_by` | list[atom-id] | no | Plain atom ids of decisions that shaped this one. No supersession semantics. |
 
-### Membership
+### Removed fields
 
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `project` | wikilink string | yes | A single wikilink to the project page this decision belongs to. Bases filters by this. If a decision genuinely spans projects, pick the primary one — cross-project decisions can be linked via the project pages themselves |
+`aliases`, `reversibility`, `impacts`, `revisit_triggers`, `tags`, `area`, `topic`
+are all gone. The schema is `.strict()` — an atom carrying any of them is rejected
+as `schema_invalid` rather than silently passing with baggage. Their replacements:
+`area`+`topic`+`tags` -> `labels`; `impacts` -> `binds`; `revisit_triggers` ->
+body `## Revisit if`; `reversibility` -> `conviction` (+ a `## Commitments` bullet
+when "hard to undo" matters); `aliases` -> resolve a frozen id and walk to head.
 
-### Lineage
+## Body convention — single altitude
 
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `derived_from` | list[wikilink] | no | The rich source (chat, mull, prior decision). Multiple allowed |
-| `informed_by` | list[wikilink] | no | Other decisions that shaped this one. No supersession semantics |
-| `supersedes` | list[wikilink] | **yes (presence)** | Must be present in frontmatter. May be empty `[]`. If non-empty, this decision revises the named one(s) |
-| `superseded_by` | list[wikilink] | no | Back-pointer, filled when a successor lands. Capture skill patches this in the same operation that writes the successor |
-
-`supersedes:` is required to be **present** even when empty — it's the structural signal that the author thought about supersession.
-
-### Impact
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `area` | string | yes | Single value from `taxonomy/areas.yaml`. Unknown values are rejected |
-| `topic` | string | yes | Single value from `taxonomy/topics.yaml`. Unknown values are rejected |
-| `impacts` | list[wikilink] | no | Architecture pages, repo notes, code refs, design docs this decision touches. Use wikilinks so Obsidian's backlinks pane surfaces "decisions touching this" automatically on the target page |
-
-### Revisit
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `revisit_triggers` | list[string] | no | Free-text triggers ("quarterly perf review") |
-
-Assumptions live in the **body**, not frontmatter. See `## Assumptions` body convention below — nested objects in frontmatter don't surface in Obsidian's Properties UI or Bases.
-
-### Classification
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `reversibility` | enum | yes | `easy`, `medium`, `hard` |
-| `tags` | list[string] | no | Always include `decision` |
-
-## Body convention — hybrid altitude
-
-Each section has a **heading + one-line gist** (always visible) plus an optional **collapsible callout** for deeper texture. The reader scanning the atom sees only headings + gist lines. Drilling deeper is one click per altitude.
-
-The example below shows the **on-disk** form (id already stamped into the H1). A **draft** emits the H1 as `# PLACEHOLDER — <title>`; `ndr capture` patches the `# PLACEHOLDER —` sentinel into `# <minted-id> — <title>` on persist.
+Content is written once, at the length it deserves. No gist+callout duplication,
+no Obsidian callouts, no slug lists. Section order is by operational importance:
+everything terse sits above the one unbounded prose section (`## Why`).
 
 ```markdown
 # 0042 — Use FastAPI for the auth service
 
 ## Decision
 
-One sentence — what was decided. The gist altitude; never put it in a callout.
+## Scope
+
+## Commitments
+
+## Revisit if
+
+## Context
 
 ## Why
 
-Brief gist line — the load-bearing reason, in one sentence.
-
-> [!info]- Full reasoning
-> Longer prose. Why this path over alternatives, what tipped the call, nuance the gist glosses.
-
 ## Alternatives
-
-One-line list of alternatives considered + verdict (rejected / deferred / preserved-elsewhere). Omit this section if there were no meaningful alternatives.
-
-> [!info]- Why they lost
-> Per-alternative paragraph or bullet on why each lost.
-
-## Assumptions
-
-Backtick-separated list of assumption slugs, one per assumption. Omit if no load-bearing assumptions.
-
-> [!warning]- <slug>
-> One-sentence description.
->
-> - **Current state:** verified-date | "active" | "needs check"
-> - **Revisit if:** condition that would flip the decision
-
-## Consequences
-
-One-line list of consequences, `·`-separated.
-
-> [!info]- Detail
-> Bulleted detail on each consequence.
 ```
 
-### How the altitudes work
+The full section-by-section content rules live in `decision-single.md` (the body
+template). Summary:
 
-| Altitude | Reader question | Where it lives |
+| Section | Required | Shape |
 | --- | --- | --- |
-| **Gist** | What was decided? | `## Decision` paragraph (always visible) |
-| **Why this** | Rationale for the chosen path | `## Why` gist line + `[!info]- Full reasoning` callout |
-| **Why not that** | Rejected alternatives | `## Alternatives` gist line + `[!info]- Why they lost` callout |
-| **What flips it** | Load-bearing assumptions | `## Assumptions` slug list + one `[!warning]-` callout per assumption |
-| **Consequences** | Ripple effects | `## Consequences` gist line + `[!info]- Detail` callout |
+| `## Decision` | yes | Prose, 1-3 sentences, <= ~60 words. What is now true. First paragraph is the machine-extracted gist. |
+| `## Scope` | no | Bullets. Semantic boundary a glob can't express (negative/conditional/layer scope). |
+| `## Commitments` | no | Bullets. One obligation the decision creates per bullet. Never restates the decision. |
+| `## Revisit if` | no | Bullets. Pure flip conditions. |
+| `## Context` | yes | Bullets. Pre-decision facts, one per bullet. May not name the chosen option. |
+| `## Why` | yes | Prose, roomy. The weighing, most-load-bearing-first. May not introduce new facts. |
+| `## Alternatives` | no | Bullets: `**name** — verdict: reason`. |
 
-The trailing `-` on `[!info]-` / `[!warning]-` makes each callout **default-collapsed** in Obsidian. The artifact itself declares "this is supplementary" — the reader doesn't curate altitude every read.
+Omit-if-empty applies to every optional section — don't render an empty heading.
 
-### Why assumptions are in body, not frontmatter
+## Reference grains
 
-Each assumption is a small structured record (`description`, `current_state`, `revisit_if`). Obsidian's Properties UI is flat — nested objects don't render and Bases can't filter on inner fields. The body callout form keeps assumptions human-readable AND skill-parseable, without pretending to be a frontmatter query target. The slug list at the top of `## Assumptions` carries enough surface for "which assumptions does this decision rest on?" without expanding any of them.
+`ndr:` references have two grains:
 
-### When to omit a section
+- `ndr:0042` — frozen atom id; resolve walks the supersession chain to the head.
+- `ndr:<label>` — all current heads carrying that taxonomy label.
 
-If a section has no content (no alternatives considered, no load-bearing assumptions), omit the section entirely — don't render an empty heading. The gist altitude must always be present (`## Decision`); other altitudes are optional per atom.
+The `#slug` and `area/topic` grains were removed with `aliases` and the
+area/topic split.
 
 ## Hard rules
 
-1. **Required fields are non-negotiable.** Capture skill refuses to write if any starred field is missing.
-2. **`supersedes:` must be present.** May be empty. Its presence is the structural signal that the author considered supersession.
-3. **Two-write supersession (three-write with alias handover).** If `supersedes:` is non-empty, the predecessor's `superseded_by:` must be patched in the same operation. Skill writes successor first, then patches predecessor. **If the predecessor carries `aliases:`, the patch also clears the predecessor's `aliases:` and appends those slugs to the successor's `aliases:` — the slug moves atomically with the supersession.** On patch failure (including alias handover), skill reports the half-state and exits.
-4. **Multi-supersession is manual.** If a predecessor is already `superseded` by a different successor, the skill refuses the patch — almost certainly a sign two competing successors were drafted in parallel.
-5. **`project:` is required.** A decision without a project hides from the project filter view. If you don't know the project yet, create a stub project page first.
-6. **Body prose is substantive.** Don't restate frontmatter fields in prose ("`derived_from: F`. `revises: A.scope`" is YAML, not English).
-7. **Slug uniqueness.** Any slug in `aliases:` must be unique vault-wide. Capture skill refuses to write a duplicate. A slug being moved during supersession is exempt from this check against its predecessor (it's vacating that home in the same operation).
+1. **Required fields are non-negotiable.** Capture refuses to write if `title`,
+   `status`, `decision_date`, `author`, `conviction`, `project`, `labels`, or
+   `supersedes` is missing. `author` is auto-filled from git when the draft omits
+   it; if git has no `user.name` and the draft carries none, that is a validation
+   error.
+2. **`supersedes:` must be present.** May be empty. Its presence is the structural
+   signal that the author considered supersession.
+3. **Two-write supersession.** If `supersedes:` is non-empty, capture patches each
+   predecessor's `status: superseded` and appends the successor's plain id to its
+   `superseded_by:` in the same operation. On patch failure it reports the
+   half-state and exits.
+4. **Multi-supersession is guarded.** If a predecessor is already `superseded` by a
+   different successor, capture refuses the patch (competing successors drafted in
+   parallel).
+5. **`project:` is required** — a plain string naming the repo/project.
+6. **Body prose is substantive.** Don't restate frontmatter fields in prose.
+7. **`labels` is gated.** Every label must appear in `<ledger>/.taxonomy/labels.yaml`;
+   capture refuses unknown values. 1-4 labels per atom.
+8. **`binds` is syntax-checked only.** Capture validates glob parseability; there is
+   no must-match-a-file gate (an atom may bind code that lands in a later PR).
