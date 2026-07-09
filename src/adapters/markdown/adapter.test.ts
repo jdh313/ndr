@@ -99,13 +99,8 @@ async function makeLedger(): Promise<string> {
   const taxonomy = path.join(dir, ".taxonomy");
   await fs.mkdir(taxonomy);
   await fs.writeFile(
-    path.join(taxonomy, "areas.yaml"),
-    "- process\n- tooling\n- scope\n- substrate\n- architecture\n",
-    "utf8",
-  );
-  await fs.writeFile(
-    path.join(taxonomy, "topics.yaml"),
-    "- substrate\n- framework\n- referencing\n- supersession\n",
+    path.join(taxonomy, "labels.yaml"),
+    "- write-side\n- taxonomy\n- meta-chain\n",
     "utf8",
   );
   return dir;
@@ -118,17 +113,16 @@ function makeDraft(fm: Record<string, unknown> = {}, body?: string): AtomDraft {
       title,
       status: "current",
       decision_date: "2026-05-15",
+      author: "test-author",
+      conviction: "tentative",
+      labels: ["write-side"],
+      binds: [],
       aliases: [],
       project: "[[Auth Rewrite]]",
       derived_from: [],
       informed_by: [],
       supersedes: [],
       superseded_by: [],
-      area: "tooling",
-      topic: "framework",
-      impacts: [],
-      revisit_triggers: [],
-      reversibility: "medium",
       tags: ["decision"],
       ...fm,
     },
@@ -152,17 +146,16 @@ async function seedAtom(
     title: opts.title,
     status: opts.status ?? "current",
     decision_date: "2026-04-01",
+    author: "test-author",
+    conviction: "tentative",
+    labels: ["write-side"],
+    binds: [],
     aliases: opts.aliases ?? [],
     project: "[[Auth Rewrite]]",
     derived_from: [],
     informed_by: [],
     supersedes: [],
     superseded_by: opts.supersededBy ?? [],
-    area: "tooling",
-    topic: "framework",
-    impacts: [],
-    revisit_triggers: [],
-    reversibility: "medium",
     tags: ["decision"],
   };
   const yaml = Object.entries(fm)
@@ -336,7 +329,7 @@ describe("MarkdownLedgerAdapter captureAtom — validation", () => {
   test("a taxonomy violation blocks the write", async () => {
     const adapter = new MarkdownLedgerAdapter(tmp);
     await expect(
-      adapter.captureAtom(makeDraft({ area: "not-a-real-area" })),
+      adapter.captureAtom(makeDraft({ labels: ["not-a-real-label"] })),
     ).rejects.toBeInstanceOf(DraftValidationError);
     expect((await fs.readdir(tmp)).filter((n) => n.endsWith(".md"))).toEqual([]);
   });
@@ -488,5 +481,31 @@ describe("MarkdownLedgerAdapter error surfacing", () => {
       expect(e.file).toContain("0001-broken.md");
       expect(e.issues.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("MarkdownLedgerAdapter taxonomy", () => {
+  let tmp: string;
+  let emptyLedgerDir: string;
+
+  beforeEach(async () => {
+    tmp = await makeLedger();
+    emptyLedgerDir = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-empty-"));
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmp, { recursive: true, force: true });
+    await fs.rm(emptyLedgerDir, { recursive: true, force: true });
+  });
+
+  test("readTaxonomy returns the labels list", async () => {
+    const adapter = new MarkdownLedgerAdapter(tmp);
+    const tax = await adapter.readTaxonomy();
+    expect(tax).toEqual({ labels: ["write-side", "taxonomy", "meta-chain"] });
+  });
+
+  test("readTaxonomy returns null when labels.yaml is missing", async () => {
+    const bare = new MarkdownLedgerAdapter(emptyLedgerDir);
+    expect(await bare.readTaxonomy()).toBeNull();
   });
 });

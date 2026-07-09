@@ -31,8 +31,7 @@ export interface LedgerScan {
 }
 
 export interface Taxonomy {
-  readonly areas: readonly string[];
-  readonly topics: readonly string[];
+  readonly labels: readonly string[];
 }
 
 // ── Findings ─────────────────────────────────────────────────────────────────
