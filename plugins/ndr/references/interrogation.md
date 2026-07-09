@@ -67,7 +67,7 @@ A decision doesn't live alone. Two questions:
 - **Failure modes:** how does the chosen path break? What's the worst realistic outcome, and what's the early-warning sign? These become the atom's `## Revisit if` conditions — the conditions under which the head should be re-examined.
 - **Composition:** what does this decision compose *with*? Does it constrain, enable, or quietly contradict an existing head? If it touches another atom's territory, that's a signal for the amend/merge routing in Move 7 — surface the related atom now, not at write time.
 
-Run an `ndr search` / `ndr current --area <area>` here to surface neighboring heads before judging composition. A candidate that contradicts a `current` head is a **supersession**, not a fresh capture — and that changes everything downstream.
+Run an `ndr search` / `ndr current --label <label>` here to surface neighboring heads before judging composition. A candidate that contradicts a `current` head is a **supersession**, not a fresh capture — and that changes everything downstream.
 
 ## Move 7 — Forward-looking bind check
 
