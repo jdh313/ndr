@@ -3,26 +3,16 @@ id: "0050"
 title: "NDR slugs live in atom aliases: frontmatter, minted lazily on demand"
 status: current
 decision_date: 2026-05-15
-
+author: "Jacob Hoehler"
+conviction: strong
 project: "[[Decision Pipeline]]"
-
 derived_from:
   - "[[Decisions/0049-ndr-reference-scheme-three-grains]]"
-informed_by:
-  - "[[Decisions/0007-mvp-substrate-markdown]]"
+informed_by: []
+labels:
+  - referencing
 supersedes: []
 superseded_by: []
-
-area: tooling
-topic: referencing
-impacts: []
-
-revisit_triggers: []
-
-reversibility: medium
-tags:
-  - decision
-  - meta-chain
 ---
 
 # 0050 — NDR slugs live in atom aliases: frontmatter, minted lazily on demand

@@ -3,23 +3,16 @@ id: '0131'
 title: ndr CLI uses Commander over oclif
 status: current
 decision_date: '2026-06-01'
-aliases: []
+author: "Jacob Hoehler"
+conviction: strong
 project: '[[ndr]]'
 derived_from:
-- "[[JUN-170 \u2014 Scaffold repo: bun init, deps, lint/format]]"
-informed_by:
-- '[[Decisions/0128-ndr-tooling-uses-typescript-and-bun-for-v1]]'
-- '[[Decisions/0129-ndr-is-cli-primary-with-a-library-underneath-skills-rewire-to-call-ndr-resolve]]'
+- "[[JUN-170 — Scaffold repo: bun init, deps, lint/format]]"
+informed_by: []
+labels:
+- framework
 supersedes: []
 superseded_by: []
-area: tooling
-topic: framework
-impacts: []
-revisit_triggers:
-- oclif plugin-loader or multi-binary pattern becomes load-bearing
-reversibility: medium
-tags:
-- decision
 ---
 # 0131 — ndr CLI uses Commander over oclif
 
