@@ -14,7 +14,7 @@ binds: []
 supersedes: []
 superseded_by: []
 derived_from:
-  - Decisions/0049-ndr-reference-scheme-three-grains
+  - ndr:0049
 informed_by:
   - "0007"
 ---
