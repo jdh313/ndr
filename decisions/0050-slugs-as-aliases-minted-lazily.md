@@ -1,7 +1,7 @@
 ---
 id: "0050"
 title: "NDR slugs live in atom aliases: frontmatter, minted lazily on demand"
-status: current
+status: superseded
 decision_date: 2026-05-15
 author: Jacob Hoehler
 conviction: tentative
@@ -12,7 +12,8 @@ labels:
   - meta-chain
 binds: []
 supersedes: []
-superseded_by: []
+superseded_by:
+  - fnqpsy
 derived_from:
   - Decisions/0049-ndr-reference-scheme-three-grains
 informed_by:
