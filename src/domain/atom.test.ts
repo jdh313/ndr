@@ -41,11 +41,11 @@ describe("generateAtomId", () => {
 
 describe("extractAtomIdFromRef", () => {
   test("accepts a plain atom id", () => {
-    expect(extractAtomIdFromRef("0072")).toBe("0072");
-    expect(extractAtomIdFromRef("k3m9xq")).toBe("k3m9xq");
+    expect(extractAtomIdFromRef("0072") as string).toBe("0072");
+    expect(extractAtomIdFromRef("k3m9xq") as string).toBe("k3m9xq");
   });
   test("still accepts a legacy wikilink (old corpora)", () => {
-    expect(extractAtomIdFromRef("[[Decisions/0072-taxonomy-as-sibling]]")).toBe("0072");
+    expect(extractAtomIdFromRef("[[Decisions/0072-taxonomy-as-sibling]]") as string).toBe("0072");
   });
   test("returns null for garbage", () => {
     expect(extractAtomIdFromRef("not-an-id")).toBeNull();

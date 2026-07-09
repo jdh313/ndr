@@ -3,27 +3,16 @@ id: "0049"
 title: "NDR references use ndr: prefix with three grains — atom-id, slug, topic"
 status: current
 decision_date: 2026-05-15
-
+author: "Jacob Hoehler"
+conviction: strong
 project: "[[Decision Pipeline]]"
-
 derived_from:
   - "[[Personal/Projects/Decision Pipeline — Reference Addressability]]"
-informed_by:
-  - "[[Decisions/0006-readside-decisions-skill]]"
-  - "[[Decisions/0008-decisions-atomic]]"
+informed_by: []
+labels:
+  - referencing
 supersedes: []
 superseded_by: []
-
-area: tooling
-topic: referencing
-impacts: []
-
-revisit_triggers: []
-
-reversibility: medium
-tags:
-  - decision
-  - meta-chain
 ---
 
 # 0049 — NDR references use ndr: prefix with three grains — atom-id, slug, topic

@@ -3,26 +3,17 @@ id: "0051"
 title: "Supersession with a slug is a three-write atomic primitive"
 status: current
 decision_date: 2026-05-15
-
+author: "Jacob Hoehler"
+conviction: tentative
 project: "[[Decision Pipeline]]"
-
 derived_from:
   - "[[Decisions/0050-slugs-as-aliases-minted-lazily]]"
-informed_by:
-  - "[[Decisions/0008-decisions-atomic]]"
+informed_by: []
+labels:
+  - referencing
+  - supersession
 supersedes: []
 superseded_by: []
-
-area: tooling
-topic: supersession
-impacts: []
-
-revisit_triggers: []
-
-reversibility: easy
-tags:
-  - decision
-  - meta-chain
 ---
 
 # 0051 — Supersession with a slug is a three-write atomic primitive
