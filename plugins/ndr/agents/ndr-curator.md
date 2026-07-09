@@ -1,6 +1,6 @@
 ---
 name: ndr-curator
-description: Corpus health report for an NDR ledger. Thin wrapper over `ndr doctor` (ndr:0152) — the CLI runs the deterministic sweep (bidirectional chain integrity, status coherence, alias drift, taxonomy violations, missing required fields, frontmatter/body drift, malformed files); this agent interprets the JSON findings into an LLM-facing health summary with severity ranking and suggested next actions. Pass `fix: true` to forward `--fix` (repairs missing `superseded_by:` back-links — the one auto-fixable class). Read-only otherwise. Dispatched manually for periodic audits or by `/decisions` when the user asks "how healthy is the decision corpus?"
+description: Corpus health report for an NDR ledger. Thin wrapper over `ndr doctor` (ndr:0152) — the CLI runs the deterministic sweep (bidirectional chain integrity, status coherence, stale binds, taxonomy (label) violations, missing required fields, frontmatter/body drift, context section gaps, malformed files); this agent interprets the JSON findings into an LLM-facing health summary with severity ranking and suggested next actions. Pass `fix: true` to forward `--fix` (repairs missing `superseded_by:` back-links — the one auto-fixable class). Read-only otherwise. Dispatched manually for periodic audits or by `/decisions` when the user asks "how healthy is the decision corpus?"
 model: haiku
 color: magenta
 tools:
@@ -51,10 +51,11 @@ Interpret, don't detect. `ndr doctor --json` produces the complete findings pict
      "issues": {
        "chain_integrity": [],
        "status_coherence": [],
-       "alias_drift": [],
+       "binds_stale": [],
        "taxonomy": [],
        "missing_fields": [],
        "frontmatter_body_drift": [],
+       "context_section": [],
        "malformed": []
      },
      "repair_candidates": [],
@@ -63,16 +64,17 @@ Interpret, don't detect. `ndr doctor --json` produces the complete findings pict
    }
    ```
 
-   Each issue entry carries `path`, `kind`, and `detail` (alias-drift entries carry `slug` / `holders` instead of a single path).
+   Each issue entry carries `path`, `kind`, and `detail`.
 5. **Interpret.** Group by issue class and rank by severity — the list below is the tiebreak order when multiple classes populate:
    - **chain_integrity / status_coherence** — highest; these break the supersession primitive (reads may land on the wrong head).
-   - **alias_drift** — high; slug resolution becomes ambiguous among live atoms.
    - **malformed** — high; these files are invisible to every bulk-read verb until fixed (ndr:0154).
    - **missing_fields** — medium; atom is incomplete but resolvable.
-   - **taxonomy** — low-medium; usually a vocabulary decision (add to taxonomy vs. fix the atom), not corruption.
+   - **taxonomy** — low-medium; a label not in `labels.yaml`; usually a vocabulary decision (add to `labels.yaml` vs. fix the atom).
+   - **binds_stale** — low; a glob matched nothing, code likely moved/deleted (owned by drift-check for semantic drift).
+   - **context_section** — low-medium; a migrated atom missing real `## Context` (placeholder-only is advisory).
    - **frontmatter_body_drift** — low; heuristic, human-review flag.
 
-   Distinguish `repairs_applied` (done, idempotent) from `repair_candidates` (would be fixed by `--fix`) and from everything else (human-only — status flips, alias handover, taxonomy policy, substantive edits).
+   Distinguish `repairs_applied` (done, idempotent) from `repair_candidates` (would be fixed by `--fix`) and from everything else (human-only — status flips, label policy, substantive edits).
 6. **Emit the report.**
 
 ## Output format
