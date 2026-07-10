@@ -85,7 +85,13 @@ Failing this check is `severity: load-bearing`. Recommend a split.
   `## Why`, `## Alternatives`.
 - **Required sections.** `## Decision`, `## Context`, and `## Why` must be present
   with non-empty content. `## Scope`, `## Commitments`, `## Revisit if`,
-  `## Alternatives` are optional (omit-if-empty, never an empty heading).
+  `## Alternatives` are optional (omit-if-empty, never an empty heading). **An
+  absent optional section is never a defect** — do not flag a missing `## Revisit
+  if` (or any optional section) as blocking or mechanical. In audit mode, flag a
+  *dropped* section only when you have positive evidence the source carried that
+  content (e.g. non-empty `revisit_triggers:` in the pre-migration frontmatter); a
+  section that was empty (`revisit_triggers: []`) or never existed is correctly
+  omitted, not lost.
 - **Section discipline.** `## Decision` is prose, 1-3 sentences, not a bullet list.
   `## Context` bullets may not name the chosen option. `## Revisit if` is bullets
   of pure flip conditions (no slug lists, no callouts).

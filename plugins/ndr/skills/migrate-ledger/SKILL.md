@@ -17,11 +17,16 @@ Convert one NDR ledger to the new atom format. Two passes:
 
 1. **Pass 1 — mechanical (`ndr migrate`).** Frontmatter conversion (wikilinks ->
    plain values; area+topic+tags -> labels; backfill author from git history and
-   conviction: tentative; drop killed fields) and callout flattening. Idempotent.
+   conviction: tentative; drop killed fields) and callout flattening. It also
+   **carries the two fields the new schema drops but pass 2 needs** into the body,
+   so the Read-only agent can see them: `revisit_triggers:` becomes a `## Revisit if`
+   stub, and a hard-to-undo `reversibility:` becomes a strippable HTML-comment hint.
+   Idempotent.
 2. **Pass 2 — judgment (`@ndr-migrator`).** Per-atom body reshaping: extract
-   `## Context`, filter old Consequences into real `## Commitments`, convert
-   Assumptions into `## Revisit if`, merge gist+callout duplication into single
-   prose, reorder sections, upgrade conviction where the Why makes strength obvious.
+   `## Context`, filter old Consequences into real `## Commitments`, merge revisit
+   conditions from **both** sources (body `## Assumptions` + the pass-1 `## Revisit
+   if` stub) into one deduped `## Revisit if`, merge gist+callout duplication into
+   single prose, reorder sections, and return a typed `suggested_conviction`.
 
 This skill is **retirable**: once every tracked ledger is migrated, delete this
 skill and `agents/ndr-migrator.md` from the plugin. The `ndr migrate` CLI command
@@ -65,8 +70,22 @@ axis files. Commit as a discrete mechanical commit:
 ### Step 2 — Pass 2 (body reshaping, batched)
 
 List the migrated atoms and dispatch `@ndr-migrator` in batches of ~8-10 files,
-passing the absolute paths. The agent returns, per atom, the reshaped body
-(frontmatter untouched). Apply each returned body with Edit.
+passing the absolute paths. The agent returns, per atom, the reshaped `body`
+(frontmatter untouched) plus a typed `suggested_conviction`.
+
+Apply the bodies with the CLI, not by hand — it splices each body while preserving
+frontmatter and guarantees the fence gap + trailing newline:
+
+    # Save the agent's JSON return to a file (raw — no re-encoding), then:
+    ndr migrate --apply-bodies batch.json --json
+
+Do NOT hand-roll a body applier with Edit — that re-invents frontmatter-clobber
+risk. If the agent's return arrives double-JSON-encoded through the mailbox, save
+it raw anyway; `--apply-bodies` tolerates one layer of double-encoding.
+
+Then act on each `suggested_conviction`: it is a typed value (`strong` / `tentative`
+/ `arbitrary` / `null`), so batch the frontmatter bumps rather than parsing prose.
+A `null` leaves pass-1's `tentative` seed in place.
 
 ### Step 3 — Quality gate per atom
 
