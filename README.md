@@ -14,6 +14,26 @@ New to the vocabulary (atom, head, ledger, supersession, grain, drift)? See
 [CONTEXT.md](./CONTEXT.md) for the glossary. The terms below are glossed on
 first use.
 
+## Installing
+
+Two channels (ndr:0q443w), both needing only the git access you already have
+to this repo:
+
+```sh
+# From source via Bun (requires Bun; runs the CLI straight from src/)
+bun install -g git+ssh://git@github.com/jdh313/ndr.git
+
+# Updating = re-run the same command (installs track main, which always
+# matches the latest release)
+```
+
+Or download the compiled binary for your platform (`ndr-darwin-arm64`,
+`ndr-linux-x64`, …) from the latest GitHub Release and put it on your PATH —
+no Bun required.
+
+Hacking on ndr itself? Use the Quickstart below instead (`bun run install:bin`
+symlinks your local build onto PATH).
+
 ## Quickstart
 
 ```sh
