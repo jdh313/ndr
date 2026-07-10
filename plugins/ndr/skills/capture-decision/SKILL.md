@@ -14,13 +14,28 @@ allowed-tools:
 
 ## Overview
 
-Thin orchestrator for the NDR capture pipeline. The work itself is delegated:
+Orchestrator for the NDR capture pipeline. The skill owns scope detection, user
+interaction, and — for in-conversation captures — composing the atom itself. The
+path **branches on `supersedes`**, because only a revising atom fires the
+irreversible two-write:
 
 ```
-in-skill scan ──► user confirms candidates ──► ndr-drafter ──► ndr-reviewer ──► ndr capture ──► summary
+FRESH (supersedes: [])       scan ─► confirm ─► compose draft.md ─► ndr capture ─► reviewer AUDITS the real atom ─► summary
+REVISING (supersedes: [...])  scan ─► confirm ─► resolve head ─► compose draft.md ─► reviewer PRE-PERSIST gate ─► ndr capture ─► summary
 ```
 
-This skill detects atomic decisions in the current conversation, confirms them with the user, delegates composition to the `ndr-drafter` subagent, sends drafts to `ndr-reviewer` for a verdict, then pipes each accepted draft to `ndr capture` for the deterministic write. Each stage has a single responsibility; the skill itself owns scope detection and user interaction.
+- A **fresh** atom patches no predecessor and has zero incoming back-pointers, so
+  it is safe to write first and audit the real, minted atom. If the reviewer
+  rejects it, fix the ledger file in place (shape/field nits) or trash it and
+  re-capture (atomicity split) — nothing to unwind.
+- A **revising** atom keeps **review-then-persist**: the reviewer gates the draft
+  *before* `ndr capture` runs the supersession two-write (ndr:8gh40e).
+- **`ndr capture` is the only writer of the ledger** and owns id assignment,
+  validation, and the two-write. The main agent authors the body as a markdown
+  draft in the scratchpad; the CLI ingests it (`ndr capture <draft.md>`).
+- The **`ndr-drafter` subagent is dispatched only on the extractor / long-source
+  path** (a big transcript/PR to isolate) — not for in-conversation composition,
+  where the orchestrator already holds the context.
 
 ## Prerequisite
 
@@ -34,10 +49,17 @@ There is no fallback path.
 
 These constraints are upstream of any subagent — the skill enforces them at the orchestration layer.
 
-1. **Atomic only.** One chosen path, one set of consequences. Bundled candidates get split before reaching the drafter. Never let a bundle through.
+1. **Atomic only.** One chosen path, one set of consequences. Bundled candidates get split before composition. Never let a bundle through.
 2. **Supersession refusal is structural, not advisory.** If revising intent appears in the conversation ("revises", "supersedes", "instead of", "we changed our mind on") OR `informed_by:` points at a `current` decision being contradicted, AND the user has not named what's being superseded — refuse to proceed. Print:
    > "This looks like a revising decision but `supersedes:` is empty. Name the decision(s) being revised, or confirm this is a fresh decision."
-3. **Review-then-persist.** No draft hits disk until the reviewer passes and the user accepts. There is no `draft` status. Drafts live in memory.
+3. **Persist ordering branches on `supersedes`.** A **revising** atom is
+   review-then-persist: the reviewer must pass *before* `ndr capture` runs the
+   irreversible two-write. A **fresh** atom (`supersedes: []`) is
+   persist-then-audit: write it with `ndr capture`, then have the reviewer audit
+   the real minted atom; a rejected fresh atom is fixed in place (shape/field
+   nits) or trashed and re-captured (atomicity split) — it patched no predecessor,
+   so there is nothing to unwind. Either way, `ndr capture` is the only path that
+   writes the ledger, mints ids, and runs the two-write.
 4. **Labels enforcement.** `labels:` (1-4 values) must come from `<ledger>/.taxonomy/labels.yaml`. Unknown values trigger "use existing or add new?" before drafting. `ndr capture` re-checks; the orchestrator's check is the friendly-prompt layer.
 5. **Single-file atoms.** `<id>-<kebab-title>.md`. No directory form, no descent files. Length is managed by the fixed section shape in the body template (single altitude, plain markdown, no callouts).
 6. **The CLI assigns ids.** Atoms get 6-char base32 ids generated inside `ndr capture` (ndr:0144). Never assign or guess an id in a draft; the body's `# PLACEHOLDER —` heading is patched by the CLI.
@@ -53,7 +75,7 @@ These constraints are upstream of any subagent — the skill enforces them at th
 - **Schema spec:** `${CLAUDE_PLUGIN_ROOT}/references/frontmatter-schema.md`.
 - **Template:** `${CLAUDE_PLUGIN_ROOT}/references/decision-single.md`.
 - **Worthiness rubric:** `${CLAUDE_PLUGIN_ROOT}/references/worthiness.md` — three-question test for "is this NDR-grain or should it route elsewhere?"
-- **Subagents:** `ndr-drafter`, `ndr-reviewer` (and `ndr-extractor` for long-source captures, `ndr-curator` for periodic audits — both out of scope for the routine capture flow).
+- **Subagents:** `ndr-reviewer` (the one common-path agent — independent grading, pinned `sonnet`); `ndr-drafter` and `ndr-extractor` only on the long-source path; `ndr-curator` for periodic audits (out of scope for the routine flow).
 
 ## Method
 
@@ -137,72 +159,84 @@ Or add new: <value>?
 
 If "add new", `Edit` `labels.yaml` to append the value before drafting. `ndr capture` will re-validate — this preflight is friendly UX, not the structural gate.
 
-### Step 5 — Delegate composition
+### Step 5 — Compose the draft
 
-Invoke the `ndr-drafter` subagent. Pass:
+For an **in-conversation capture** the orchestrator already holds the context —
+compose the atom yourself; do **not** dispatch the drafter. For each confirmed
+candidate:
 
-```json
-{
-  "candidates": [
-    {
-      "title": "Use FastAPI for the auth service",
-      "gist": "...",
-      "quotes": ["..."],
-      "suggested_labels": ["tooling", "substrate"],
-      "suggested_project": "Auth Rewrite",
-      "supersedes": [],
-      "derived_from": ["<chat / mull source path or ref>"],
-      "informed_by": [],
-      "decision_date": "<ISO today>",
-      "project": "Auth Rewrite",
-      "conviction": "tentative",
-      "binds": []
-    }
-  ]
-}
-```
+- If the candidate is **revising**, first resolve the named predecessor to its
+  current head: `ndr resolve '<atom-id>'`. Supersede the head, never a stale
+  mid-chain id. (This is the one load-bearing regrounding point.)
+- Assemble the frontmatter from values already in hand: title, project, labels,
+  conviction, decision_date, `supersedes`, binds, derived_from, informed_by.
+  **Omit `id` and `author`** — `ndr capture` mints the id and fills author from git.
+- Write the body per `${CLAUDE_PLUGIN_ROOT}/references/decision-single.md`:
+  single-altitude plain markdown, section order Decision / Scope / Commitments /
+  Revisit if / Context / Why / Alternatives, with a literal `# PLACEHOLDER — <title>`
+  heading.
+- Write the complete atom (frontmatter fence + body) to one scratchpad file per
+  candidate: `<scratchpad>/<kebab-title>.draft.md`. Authoring markdown (not a JSON
+  payload) keeps the body free of escaping.
 
-The drafter returns `{drafts: [{frontmatter, body, missing_fields}]}`. If any `missing_fields` are non-empty: prompt the user, fill in the values, and re-invoke the drafter with the filled candidate. Repeat until all drafts come back with `missing_fields: []`.
+**Model tiers.** The body is the one quality-sensitive step. Compose it at the
+session model when that is Sonnet-or-better (Sonnet holds altitude comfortably;
+Opus/Fable more so, at negligible extra cost — bodies are short). If the session
+is Haiku *and* the atom is high-stakes, escalate composition to a `sonnet`-pinned
+one-shot agent. Either way the independent reviewer (Step 6, pinned `sonnet`) is
+the quality floor — it catches altitude/atomicity slips a weaker author misses.
 
-### Step 6 — Review
+**Long-source captures only:** when the source is a big transcript / PR / doc,
+dispatch the `ndr-drafter` subagent (extractor path) to compose in isolated
+context. It returns `{drafts: [{frontmatter, body, missing_fields}]}`; fill any
+`missing_fields`, then write each returned atom to a scratchpad `.draft.md` and
+continue as below.
 
-Invoke `ndr-reviewer` with `{mode: "pre-persist", drafts: [...]}`. The reviewer returns either:
+### Step 6 — Review + persist (branches on `supersedes`)
 
-- `{verdict: "pass", issues: []}` — proceed to Step 7.
-- `{verdict: "fail", issues: [...]}` — surface issues to the user. For `severity: load-bearing` (atomicity, body altitude), the user must decide whether to edit the candidate(s) and re-draft, or proceed despite the warning (rare — prefer fixing). For `severity: mechanical`, you may auto-fix (e.g. set missing field) and re-invoke the reviewer.
+Dispatch `ndr-reviewer` as a **blocking one-shot** — await its single result
+inline; do not name/park it, and do not status-ping. It is pinned to `sonnet`
+(the quality floor, independent of the session model). `ndr capture` accepts the
+markdown draft file directly and strips any stray `id` before minting.
 
-Do not call `ndr capture` until the reviewer passes (or the user explicitly overrides a load-bearing flag).
+**Fresh atom (`supersedes: []`) — persist, then audit the real atom:**
 
-### Step 7 — Persist
+1. `ndr capture <scratchpad>/<name>.draft.md` — mints id, patches the H1,
+   validates, writes the ledger atom. Branch on the exit code (below).
+2. On exit 0, audit the **real** atom: `ndr-reviewer` with
+   `{mode: "audit", paths: ["decisions/<id>-<slug>.md"]}`.
+   - `verdict: pass` → done.
+   - shape / field / mechanical fail → `Edit` the ledger file in place, re-audit.
+   - atomicity fail (needs a split) → `trash` the file and re-capture as two
+     atoms. A fresh atom patched no predecessor and nothing points at it, so
+     removal is clean; confirm with `ndr doctor`.
 
-`ndr capture` is **single-atom**: loop over the accepted drafts and pipe each one to the CLI as JSON on stdin. Use a quoted heredoc — it avoids shell-quoting hazards (JSON quotes, newlines, `$`, backticks pass through verbatim) and keeps each persist call to a single Bash invocation. The draft payload is `{frontmatter, body}`.
+**Revising atom (`supersedes: [...]`) — review, then persist:**
 
-**Normalize the payload before piping** (defense-in-depth — a stray field from any caller, not just `ndr-drafter`, must not fail the write):
+1. Pre-persist review gates the two-write: `ndr-reviewer` with
+   `{mode: "pre-persist", drafts: [{frontmatter, body}]}` (read the draft file for
+   the payload).
+   - `verdict: fail` → fix the `.draft.md` and re-review. For a `load-bearing`
+     flag (atomicity, altitude) prefer fixing; the user may override only
+     explicitly.
+   - `verdict: pass` → proceed.
+2. `ndr capture <scratchpad>/<name>.draft.md` — fires the supersession two-write.
+   Branch on the exit code (below).
 
-- **Strip `missing_fields`** — drafter scratch, not part of the payload.
-- **Strip `frontmatter.id` if present** — the CLI mints the id only when the field is absent; a leftover placeholder string (e.g. `"TBD — assigned by ndr capture"`) is validated and rejected. Delete the key so the mint path runs.
-- **Normalize the body H1 to `# PLACEHOLDER — <title>`** — the CLI patches the `# PLACEHOLDER —` sentinel into `# <id> — <title>`. If a draft arrived with the title already inline (`# <title>` or `# <id> — <title>`), the sentinel is absent and the heading never gets the id. Rewrite the first H1 line to `# PLACEHOLDER — <title>` before piping.
+**Exit codes** (ndr:0146 — errors go to stderr as JSON; stdout only on success):
 
-Then pipe the cleaned `{frontmatter, body}`:
+- `0` — success. Parse stdout `{id, path, superseded}` (array even for one
+  predecessor). Accumulate for the summary.
+- `1` — validation failure (required fields, enums, taxonomy, malformed draft).
+  Surface `error.messages`, fix the draft, retry.
+- `2` — supersession conflict (predecessor already superseded by a different
+  atom). Surface and stop — manual resolution.
+- `3` — mid-transaction half-state. Surface the report so the user knows exactly
+  what was written vs patched and what to repair by hand.
 
-```bash
-ndr capture <<'NDR_DRAFT_EOF'
-{"frontmatter": { ...one draft's frontmatter... }, "body": "..."}
-NDR_DRAFT_EOF
-```
+Remove the scratchpad `.draft.md` files once their atoms have landed.
 
-The body's `# PLACEHOLDER —` heading is patched to the assigned id by the CLI — leave it as the drafter produced it.
-
-**Branch on the exit code before touching stdout** (ndr:0146 — errors go to stderr as JSON; stdout is only populated on success):
-
-- `0` — success. Parse stdout: `{id, path, superseded}` (array even for one predecessor). Accumulate for the summary.
-- `1` — validation failure (bad JSON, required fields, enums, taxonomy). Surface `error.messages` and loop back to drafting for that atom.
-- `2` — supersession conflict (predecessor already superseded by a different atom). Surface and stop — manual resolution.
-- `3` — mid-transaction failure (half-state). Surface the half-state report so the user knows exactly what was written vs patched and what to repair by hand.
-
-Continue the loop for remaining drafts only after exit 0; on 2 or 3, stop the run and summarize what landed before the failure.
-
-### Step 8 — Summarize
+### Step 7 — Summarize
 
 Report what was written and what was patched. One line per file. See Output examples below.
 
@@ -215,6 +249,9 @@ The default flow scans the conversation inline (Step 1). Invoke `ndr-extractor` 
 - The conversation has accumulated so much context that an inline scan would be unreliable.
 
 The extractor returns the same `{candidates: [...]}` structure that Step 3 expects.
+This is the **long-source path**: after confirmation, composition goes through the
+`ndr-drafter` subagent (Step 5's long-source branch), not inline — the drafter and
+extractor both earn their isolated context when the source is too big to hold.
 
 ## Output examples
 
@@ -278,8 +315,8 @@ append "v8t2ne" to superseded_by.
 - `/interrogate-decision` — the deep pre-capture deliberation. Run it BEFORE this skill when a candidate is consequential enough to stress-test (genuine fork, possible supersession, "is this even a decision?"); it produces a routing verdict and hands the confirmed candidate here.
 - `ndr capture` — the deterministic write path (ndr:0129, ndr:0146); owns ids (ndr:0144) and the two-write supersession transaction (ndr:0051).
 - `ndr-extractor` — long-source candidate extraction.
-- `ndr-drafter` — frontmatter + body composition.
-- `ndr-reviewer` — pre-persist judge (atomicity, body altitude, soft mechanical checks).
+- `ndr-drafter` — frontmatter + body composition, **long-source path only** (in-conversation composition is the skill's job).
+- `ndr-reviewer` — the atom judge (atomicity, body altitude, soft mechanical checks): pre-persist for revising atoms, audit-the-real-atom for fresh ones.
 - `ndr-curator` — corpus-level health audit (run periodically, not per-capture).
 - `${CLAUDE_PLUGIN_ROOT}/references/frontmatter-schema.md` — full schema spec.
 - `${CLAUDE_PLUGIN_ROOT}/references/taxonomy.md` — taxonomy rules and growth protocol.
