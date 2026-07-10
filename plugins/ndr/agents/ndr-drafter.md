@@ -35,7 +35,9 @@ For each candidate the orchestrator passes:
 - `suggested_labels` — 1-4 label guesses from the extractor
 - `suggested_project` — best guess from the extractor
 - `conviction` — strong | tentative | arbitrary (caller-confirmed judgment)
-- `binds` — optional list of repo-relative glob patterns. May be `[]`.
+- `binds` — optional list of repo-relative glob patterns. May be `[]`. Bind
+  directories/layers as a glob with `/**` (`src/auth/**`) — a bare directory path
+  matches no file and doctor flags it `binds_matches_nothing`.
 - `supersedes` — list of plain atom ids. May be `[]`. If non-empty, the caller has
   already confirmed the supersession; you simply set the field.
 - `derived_from` — free-form refs to the rich source (PR URL, transcript path, mull note)
