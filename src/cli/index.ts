@@ -23,6 +23,8 @@ import {
   resolveLedger as resolveLedgerInfo,
   resolveLedgerPath,
 } from "./config.ts";
+import { splitFrontmatter } from "../adapters/markdown/fence.ts";
+import { parseFrontmatterYaml } from "../adapters/markdown/yaml.ts";
 import { migrateCommand, applyBodiesCommand } from "./migrate.ts";
 import { LABELS_SEED, NDR_RULE, ndrTomlTemplate } from "./templates.ts";
 import type {
@@ -239,13 +241,19 @@ export async function run(argv: readonly string[]): Promise<number> {
 
   program
     .command("capture [file]")
-    .description("Capture a decision atom from a draft JSON file (or stdin if omitted).")
+    .description(
+      "Capture a decision atom from a draft file (JSON, or a markdown draft with a --- fence) or stdin.",
+    )
     .option(
       "--ledger <path>",
       "Ledger directory to write to (wins over the draft's vault_decisions).",
     )
     .action(async (file: string | undefined, options: { ledger?: string }) => {
-      const raw = file !== undefined ? await fs.readFile(file, "utf8") : await readStdin();
+      const rawInput = file !== undefined ? await fs.readFile(file, "utf8") : await readStdin();
+      // Accept a markdown draft (front-fence + body) as well as the JSON wire
+      // shape: the main agent authors atoms as prose without JSON-escaping the
+      // body. A leading `---` is the sentinel; JSON drafts start with `{`.
+      const raw = maybeConvertMarkdownDraft(rawInput);
       // Precedence: flag > NDR_LEDGER env > draft vault_decisions > .ndr.toml
       // walk-up > error. The walk-up runs eagerly so a broken .ndr.toml fails
       // loudly even when the draft carries its own ledger.
@@ -756,6 +764,27 @@ async function gitUserName(): Promise<string | null> {
 // production default) resolves it via `git config user.name`. Outcomes map to
 // exit codes 0 (ok) / 1 (validation) / 2 (supersession conflict) / 3
 // (half-state).
+// A capture draft may arrive as the JSON wire shape (`{frontmatter, body}`) or
+// as a markdown draft file (a `---` fence + body) authored directly by the main
+// agent. Convert the latter into the former so `captureCommand` keeps its single
+// JSON entry contract. A leading `---` is unambiguous — JSON drafts start `{`.
+// The draft frontmatter must omit `id` (the CLI mints it); a stray placeholder
+// `id` is stripped here so hand-authored drafts don't trip validation.
+export function maybeConvertMarkdownDraft(rawInput: string): string {
+  const trimmed = rawInput.trimStart();
+  if (!trimmed.startsWith("---")) return rawInput;
+  try {
+    const { yaml, body } = splitFrontmatter(trimmed);
+    const frontmatter = (parseFrontmatterYaml(yaml).data ?? {}) as Record<string, unknown>;
+    delete frontmatter.id;
+    return JSON.stringify({ frontmatter, body });
+  } catch {
+    // Malformed fence — fall through to the JSON path, which reports a clean
+    // exit-1 rather than letting the fence error crash the command.
+    return rawInput;
+  }
+}
+
 export async function captureCommand(
   rawJson: string,
   ledgerFlag?: string,
