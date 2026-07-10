@@ -171,6 +171,8 @@ candidate:
 - Assemble the frontmatter from values already in hand: title, project, labels,
   conviction, decision_date, `supersedes`, binds, derived_from, informed_by.
   **Omit `id` and `author`** — `ndr capture` mints the id and fills author from git.
+  Bind directories as a `/**` glob (`src/auth/**`) — a bare directory path matches
+  no file and `ndr doctor` flags it `binds_matches_nothing`.
 - Write the body per `${CLAUDE_PLUGIN_ROOT}/references/decision-single.md`:
   single-altitude plain markdown, section order Decision / Scope / Commitments /
   Revisit if / Context / Why / Alternatives, with a literal `# PLACEHOLDER — <title>`
