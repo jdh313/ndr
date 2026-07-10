@@ -48,20 +48,28 @@ A personal catch-all ledger is just a `.ndr.toml` higher up the walk (e.g. at `~
 
 ## Capture flow
 
-`/capture-decision` is invokable from any chat where decisions landed. The skill itself is a thin orchestrator; the work happens in a pipeline of focused subagents plus the deterministic CLI write path:
+`/capture-decision` is invokable from any chat where decisions landed. The skill
+owns scope detection, user interaction, and — for in-conversation captures —
+composing the atom itself. The path **branches on `supersedes`**, because only a
+revising atom fires the irreversible two-write:
 
 ```
-in-skill scan ──► user confirms candidates ──► ndr-drafter ──► ndr-reviewer ──► ndr capture ──► summary
+FRESH (supersedes: [])       scan ─► confirm ─► compose draft.md ─► ndr capture ─► reviewer AUDITS the real atom ─► summary
+REVISING (supersedes: [...])  scan ─► confirm ─► resolve head ─► compose draft.md ─► reviewer PRE-PERSIST gate ─► ndr capture ─► summary
 ```
+
+The `ndr-drafter` subagent sits on the **long-source path only** (extractor →
+drafter), where a big source is worth isolating; in-conversation composition is
+the skill's own job.
 
 1. **Scan.** Skill scans the current conversation for atomic decisions. Atomic = one chosen path with one set of consequences. Bundled candidates (e.g. "use FastAPI + Postgres") get split. **For long sources** (pasted transcript, file, PR thread), the skill invokes the `ndr-extractor` subagent instead of scanning inline; the extractor returns structured candidates with supporting quotes.
 2. **Detect supersession intent.** The skill watches for revising signals — intent words ("revises", "supersedes", "instead of"), or a candidate that contradicts a decision named in chat / `informed_by:` context. Candidates with revising signal are tagged so Step 3 can ask the user what's being superseded.
 2.5. **Worthiness pass.** Atomicity (Step 1) checks shape; this checks grain. The three-question rubric in `references/worthiness.md` (named alternative? future-revisitable? rationale outlives the code site?) tags each candidate as `ndr-worthy`, `borderline`, or `not-ndr` with a suggested routing alternative (code comment, CLAUDE.md gotcha, rule file). This is a soft prompt surfaced to the user in Step 3, not a hard gate — the user always has the final say.
 3. **Confirm candidates.** Each candidate is presented as a one-line summary. User confirms titles, drops candidates, names predecessors for revising signals, and routes any `borderline`/`not-ndr` tags. Refusal-to-proceed is structural: if revising intent is present and the user neither names a predecessor nor confirms "this is fresh", the skill stops.
 4. **Labels preflight.** Skill suggests 1-4 `labels:` per candidate from `<ledger>/.taxonomy/labels.yaml`. Unknown values trigger a "use existing or add new?" prompt; "add new" appends to the YAML file before drafting. `ndr capture` re-validates — this preflight is friendly UX, not the structural gate.
-5. **Delegate composition.** Skill invokes the `ndr-drafter` subagent with confirmed candidates. The drafter returns `{frontmatter, body, missing_fields}` per atom. **The drafter never touches disk and never assigns IDs** — the body heading stays as `# PLACEHOLDER — <title>`. If `missing_fields` is non-empty, the skill prompts the user, fills the gap, and re-invokes the drafter. Drafts live in memory.
-6. **Review.** Skill invokes `ndr-reviewer` with `{mode: "pre-persist", drafts: [...]}`. The reviewer's load-bearing checks are atomicity (one chosen path, one set of consequences) and body shape (fixed section order, single-altitude plain prose, no callouts). It also runs soft mechanical checks (frontmatter completeness, labels, status). Verdict is `pass` or `fail` with structured issues. Mechanical issues may be auto-fixed and re-reviewed; load-bearing failures route back to the drafter or to user edits.
-7. **Persist.** `ndr capture` is **single-atom** — the skill loops accepted drafts, piping each as JSON on stdin via quoted heredoc. The draft schema:
+5. **Compose.** For an in-conversation capture the skill composes the atom itself — the context is already loaded. It assembles frontmatter from values already in hand (omitting `id`/`author`; the CLI supplies both) and writes the body per `references/decision-single.md` to a scratchpad `.draft.md` (markdown, so the body is escaping-free). For a **revising** candidate it first resolves the predecessor to its current head (`ndr resolve`). **Long-source only:** a big transcript/PR/doc is composed by the `ndr-drafter` subagent in isolated context, returning `{frontmatter, body, missing_fields}`.
+6. **Review + persist (branch on `supersedes`).** The reviewer is dispatched as a blocking one-shot, pinned to `sonnet` (the quality floor, independent of the session model). **Fresh** atoms are persist-then-audit: `ndr capture <draft.md>` writes the real atom, then `ndr-reviewer {mode: "audit", paths: [...]}` grades it; a rejection is fixed in place or trashed + re-captured (a fresh write patched no predecessor, so it is safe to unwind). **Revising** atoms are review-then-persist: `ndr-reviewer {mode: "pre-persist", drafts: [...]}` must pass *before* `ndr capture` runs the two-write. Load-bearing failures (atomicity, altitude) route to a fix; mechanical issues may be auto-fixed and re-reviewed.
+7. **Persist detail.** `ndr capture` accepts a markdown draft file (a `---` fence + body) as well as the JSON wire shape below; it is **single-atom** — the skill captures one draft at a time. The draft schema:
 
    ```json
    {
@@ -85,11 +93,14 @@ in-skill scan ──► user confirms candidates ──► ndr-drafter ──►
 
 ### Why this shape
 
-The pipeline split is deliberate:
+The split follows one rule: **a subagent earns its place only through isolation
+(a source too big to hold) or independence (fresh eyes the author can't provide).**
+Everything else is the skill (orchestration + in-context judgment) or the CLI
+(determinism).
 
-- **Skill = scope detection + user interaction.** The skill owns "what is this conversation about?" because the conversation context is already loaded; sending it to a subagent costs tokens and adds latency.
-- **Subagents = focused composition.** Each subagent has one job (extract, draft, review) and isolated context. The reviewer cannot accidentally rewrite the draft; the drafter cannot accidentally write to disk.
-- **`ndr capture` = determinism.** Id assignment, taxonomy enforcement, and the supersession transaction must not depend on LLM judgment. The CLI is the only path that touches disk — typed, tested (`bun test` in `~/Projects/ndr`), and easy to reason about under failure.
+- **Skill = scope detection + user interaction + in-conversation composition.** The skill owns "what is this conversation about?" and writes the atom, because the context is already loaded; sending it to a subagent costs tokens and adds latency for no isolation benefit.
+- **Reviewer = independence, pinned tier.** The one agent on the common path. Its value is grading the author can't do for itself; pinning it to `sonnet` makes atom quality independent of the session model (a Haiku session still gets a Sonnet-graded atom). The drafter is an agent only on the long-source path, where isolating a big source is the payoff.
+- **`ndr capture` = determinism.** Id assignment, taxonomy enforcement, and the supersession transaction must not depend on LLM judgment. The CLI is the only path that **mints ids and runs the two-write** — typed, tested (`bun test` in `~/Projects/ndr`), and easy to reason about under failure. (Post-capture prose fixes to a persisted fresh atom may edit the file directly, as any manual edit could — that is not the determinism-critical surface.)
 
 ## Read flow
 
