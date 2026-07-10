@@ -23,7 +23,7 @@ import {
   resolveLedger as resolveLedgerInfo,
   resolveLedgerPath,
 } from "./config.ts";
-import { migrateCommand } from "./migrate.ts";
+import { migrateCommand, applyBodiesCommand } from "./migrate.ts";
 import { LABELS_SEED, NDR_RULE, ndrTomlTemplate } from "./templates.ts";
 import type {
   Atom,
@@ -268,14 +268,24 @@ export async function run(argv: readonly string[]): Promise<number> {
     .description("Mechanically migrate old-format atoms to the new format (pass 1; idempotent).")
     .option("--ledger <path>", "Ledger directory to migrate (default: .ndr.toml walk-up).")
     .option("--dry-run", "Report what would change without writing.", false)
+    .option(
+      "--apply-bodies <file>",
+      "Pass 2: splice reshaped bodies from an @ndr-migrator JSON file into their atoms (frontmatter untouched).",
+    )
     .option("--json", "Emit a structured JSON summary.", false)
-    .action(async (options: { ledger?: string; dryRun: boolean; json: boolean }) => {
-      const ledger = resolveLedger(options.ledger);
-      if (ledger === null) return;
-      const config = findRepoConfigSafe(process.cwd());
-      const repoRoot = config ? path.dirname(config.configPath) : null;
-      emit(await migrateCommand(ledger, repoRoot, { dryRun: options.dryRun, json: options.json }));
-    });
+    .action(
+      async (options: { ledger?: string; dryRun: boolean; applyBodies?: string; json: boolean }) => {
+        if (options.applyBodies !== undefined) {
+          emit(await applyBodiesCommand(options.applyBodies, { json: options.json }));
+          return;
+        }
+        const ledger = resolveLedger(options.ledger);
+        if (ledger === null) return;
+        const config = findRepoConfigSafe(process.cwd());
+        const repoRoot = config ? path.dirname(config.configPath) : null;
+        emit(await migrateCommand(ledger, repoRoot, { dryRun: options.dryRun, json: options.json }));
+      },
+    );
 
   await program.parseAsync([...argv]);
   return exitCode;

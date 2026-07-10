@@ -3,7 +3,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { migrateCommand } from "./migrate.ts";
+import { migrateCommand, applyBodiesCommand } from "./migrate.ts";
 
 const OLD_ATOM = `---
 id: '0153'
@@ -101,6 +101,46 @@ describe("ndr migrate", () => {
     expect(raw).not.toContain("[[Decisions/");
     expect(raw).not.toContain("[!info]-");
     expect(raw).toContain("Longer prose here.");
+  });
+
+  test("non-empty revisit_triggers are relocated into a ## Revisit if body stub", async () => {
+    const atom = OLD_ATOM.replace(
+      "revisit_triggers: []",
+      "revisit_triggers:\n- swamp ships a native round-trip\n- markdown stops being canonical",
+    );
+    await writeAtom(ledgerDir, "0153-taxonomy-enforcement.md", atom);
+    await writeOldTaxonomy(ledgerDir);
+    await migrateCommand(ledgerDir, repoRoot, { json: true });
+
+    const raw = await fs.readFile(path.join(ledgerDir, "0153-taxonomy-enforcement.md"), "utf8");
+    expect(raw).toContain("## Revisit if");
+    expect(raw).toContain("- swamp ships a native round-trip");
+    expect(raw).toContain("- markdown stops being canonical");
+    // Still gone from frontmatter — carried into the body, not left in the head.
+    expect(raw).not.toMatch(/^revisit_triggers:/m);
+  });
+
+  test("a hard-to-undo reversibility is surfaced as a strippable Commitments hint", async () => {
+    const atom = OLD_ATOM.replace("reversibility: medium", "reversibility: low");
+    await writeAtom(ledgerDir, "0153-taxonomy-enforcement.md", atom);
+    await writeOldTaxonomy(ledgerDir);
+    await migrateCommand(ledgerDir, repoRoot, { json: true });
+
+    const raw = await fs.readFile(path.join(ledgerDir, "0153-taxonomy-enforcement.md"), "utf8");
+    expect(raw).toContain("<!-- migrate: reversibility");
+    expect(raw).toContain("Commitments bullet");
+    // The killed frontmatter field is still gone.
+    expect(raw).not.toMatch(/^reversibility:/m);
+  });
+
+  test("an easily-reversible reversibility carries nothing (genuinely nothing to preserve)", async () => {
+    const atom = OLD_ATOM.replace("reversibility: medium", "reversibility: high");
+    await writeAtom(ledgerDir, "0153-taxonomy-enforcement.md", atom);
+    await writeOldTaxonomy(ledgerDir);
+    await migrateCommand(ledgerDir, repoRoot, { json: true });
+
+    const raw = await fs.readFile(path.join(ledgerDir, "0153-taxonomy-enforcement.md"), "utf8");
+    expect(raw).not.toContain("reversibility");
   });
 
   test("migrate seeds labels.yaml from areas+topics+stray tags and removes the old files", async () => {
@@ -222,5 +262,132 @@ Body.
     const summary = JSON.parse(result.stdout);
     expect(summary.migrated).toBe(0);
     expect(summary.skipped).toBe(1);
+  });
+});
+
+const NEW_ATOM = `---
+id: "0153"
+title: Taxonomy enforcement
+status: current
+decision_date: "2026-06-04"
+author: Jacob Hoehler
+conviction: tentative
+project: ndr
+labels: [architecture]
+binds: []
+supersedes: []
+superseded_by: []
+---
+# 0153 — old body
+
+## Decision
+
+Placeholder body pass 2 will replace.
+`;
+
+describe("ndr migrate --apply-bodies", () => {
+  let ledgerDir: string;
+
+  beforeEach(async () => {
+    ledgerDir = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-apply-"));
+  });
+
+  afterEach(async () => {
+    await fs.rm(ledgerDir, { recursive: true, force: true });
+  });
+
+  test("splices the reshaped body while preserving frontmatter verbatim", async () => {
+    const atomPath = path.join(ledgerDir, "0153-taxonomy-enforcement.md");
+    await fs.writeFile(atomPath, NEW_ATOM, "utf8");
+    const bodiesPath = path.join(ledgerDir, "bodies.json");
+    await fs.writeFile(
+      bodiesPath,
+      JSON.stringify({
+        atoms: [{ path: atomPath, body: "# 0153 — reshaped\n\n## Decision\n\nReshaped prose." }],
+      }),
+      "utf8",
+    );
+
+    const result = await applyBodiesCommand(bodiesPath, { json: true });
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).applied).toBe(1);
+
+    const raw = await fs.readFile(atomPath, "utf8");
+    // Frontmatter untouched.
+    expect(raw).toContain("conviction: tentative");
+    expect(raw).toContain("author: Jacob Hoehler");
+    // Body replaced, with a blank line after the fence and a trailing newline.
+    expect(raw).toContain("Reshaped prose.");
+    expect(raw).not.toContain("Placeholder body pass 2 will replace.");
+    expect(raw).toMatch(/---\n\n# 0153 — reshaped/);
+    expect(raw.endsWith("\n")).toBe(true);
+  });
+
+  test("guarantees a trailing newline when the body lacks one", async () => {
+    const atomPath = path.join(ledgerDir, "0153.md");
+    await fs.writeFile(atomPath, NEW_ATOM, "utf8");
+    const bodiesPath = path.join(ledgerDir, "bodies.json");
+    await fs.writeFile(
+      bodiesPath,
+      JSON.stringify({ atoms: [{ path: atomPath, body: "# t\n\n## Decision\n\nNo newline" }] }),
+      "utf8",
+    );
+
+    await applyBodiesCommand(bodiesPath, { json: true });
+    const raw = await fs.readFile(atomPath, "utf8");
+    expect(raw.endsWith("No newline\n")).toBe(true);
+  });
+
+  test("tolerates double-JSON-encoded payloads (mailbox relay artifact)", async () => {
+    const atomPath = path.join(ledgerDir, "0153.md");
+    await fs.writeFile(atomPath, NEW_ATOM, "utf8");
+    const bodiesPath = path.join(ledgerDir, "bodies.json");
+    // A JSON string that itself contains the JSON payload.
+    await fs.writeFile(
+      bodiesPath,
+      JSON.stringify(JSON.stringify({ atoms: [{ path: atomPath, body: "# t\n\n## Decision\n\nX" }] })),
+      "utf8",
+    );
+
+    const result = await applyBodiesCommand(bodiesPath, { json: true });
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).applied).toBe(1);
+  });
+
+  test("reports a bad entry as failed without aborting the batch", async () => {
+    const goodPath = path.join(ledgerDir, "good.md");
+    await fs.writeFile(goodPath, NEW_ATOM, "utf8");
+    const bodiesPath = path.join(ledgerDir, "bodies.json");
+    await fs.writeFile(
+      bodiesPath,
+      JSON.stringify({
+        atoms: [
+          { path: goodPath, body: "# g\n\n## Decision\n\nok" },
+          { path: 42, body: "bad" },
+          { path: path.join(ledgerDir, "missing.md"), body: "# m\n\n## Decision\n\nx" },
+        ],
+      }),
+      "utf8",
+    );
+
+    const result = await applyBodiesCommand(bodiesPath, { json: true });
+    expect(result.exitCode).toBe(1);
+    const summary = JSON.parse(result.stdout);
+    expect(summary.applied).toBe(1);
+    expect(summary.failed).toHaveLength(2);
+  });
+
+  test("an unreadable bodies file returns exit 1 with a stderr message", async () => {
+    const result = await applyBodiesCommand(path.join(ledgerDir, "nope.json"), { json: true });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("cannot read bodies file");
+  });
+
+  test("a non-JSON bodies file returns exit 1", async () => {
+    const bodiesPath = path.join(ledgerDir, "bodies.json");
+    await fs.writeFile(bodiesPath, "not json {", "utf8");
+    const result = await applyBodiesCommand(bodiesPath, { json: true });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("not valid JSON");
   });
 });

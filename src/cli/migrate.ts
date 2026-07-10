@@ -71,7 +71,7 @@ export async function migrateCommand(
       labelsTruncated.push({ path: name, dropped: droppedLabels });
     }
     for (const l of next.labels as string[]) strayLabels.add(l);
-    const nextBody = flattenCallouts(body);
+    const nextBody = appendMigrationCarry(flattenCallouts(body), data);
 
     if (opts.dryRun !== true) {
       await fs.writeFile(
@@ -105,6 +105,73 @@ export async function migrateCommand(
         (labelsTruncated.length > 0
           ? `${labelsTruncated.length} atom(s) had labels truncated\n`
           : "");
+  return { stdout, stderr: "", exitCode: failed.length > 0 ? 1 : 0 };
+}
+
+interface ApplyBodiesOptions {
+  readonly json?: boolean;
+}
+
+// Pass 2 of the migration applies reshaped bodies returned by `@ndr-migrator`.
+// The agent returns `{ "atoms": [{ "path", "body" }] }`; this command splices
+// each body into its file WITHOUT touching frontmatter (pass 1 owns it) and
+// guarantees the fence gap + trailing newline. Centralizing this here removes
+// the hand-rolled, frontmatter-clobber-prone applier every migration otherwise
+// re-invents.
+export async function applyBodiesCommand(
+  jsonPath: string,
+  opts: ApplyBodiesOptions = {},
+): Promise<ResolveResult> {
+  const asMsg = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+  let rawJson: string;
+  try {
+    rawJson = await fs.readFile(path.resolve(jsonPath), "utf8");
+  } catch (err) {
+    return { stdout: "", stderr: `cannot read bodies file ${jsonPath}: ${asMsg(err)}\n`, exitCode: 1 };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawJson);
+    // Tolerate double-encoding — a JSON string that itself contains the payload,
+    // which happens when the agent's output is relayed through a mailbox.
+    if (typeof parsed === "string") parsed = JSON.parse(parsed);
+  } catch (err) {
+    return { stdout: "", stderr: `bodies file is not valid JSON: ${asMsg(err)}\n`, exitCode: 1 };
+  }
+
+  const atoms = (parsed as { atoms?: unknown }).atoms;
+  if (!Array.isArray(atoms)) {
+    return { stdout: "", stderr: `bodies file must be an object with an "atoms" array\n`, exitCode: 1 };
+  }
+
+  const applied: string[] = [];
+  const failed: { path: string; reason: string }[] = [];
+  for (const entry of atoms) {
+    const e = entry as { path?: unknown; body?: unknown };
+    if (typeof e.path !== "string" || typeof e.body !== "string") {
+      failed.push({ path: String(e.path ?? "?"), reason: "entry missing string `path` or `body`" });
+      continue;
+    }
+    const file = path.resolve(e.path);
+    try {
+      const raw = await fs.readFile(file, "utf8");
+      const { yaml } = splitFrontmatter(raw);
+      const withNewline = e.body.endsWith("\n") ? e.body : `${e.body}\n`;
+      const withGap = withNewline.startsWith("\n") ? withNewline : `\n${withNewline}`;
+      await fs.writeFile(file, joinFrontmatter(yaml, withGap), "utf8");
+      applied.push(e.path);
+    } catch (err) {
+      failed.push({ path: e.path, reason: asMsg(err) });
+    }
+  }
+
+  const summary = { applied: applied.length, failed };
+  const stdout =
+    opts.json === true
+      ? JSON.stringify(summary, null, 2) + "\n"
+      : `applied ${applied.length} bod${applied.length === 1 ? "y" : "ies"}, failed ${failed.length}\n`;
   return { stdout, stderr: "", exitCode: failed.length > 0 ? 1 : 0 };
 }
 
@@ -150,6 +217,43 @@ function convertFrontmatter(
     },
     droppedLabels: deduped.slice(4),
   };
+}
+
+// Carry pass-2-relevant fields the new frontmatter schema drops into the body,
+// where the Read-only `@ndr-migrator` agent can see them — otherwise pass 2
+// cannot reshape what pass 1 already deleted (the agent has no git).
+//
+// - `revisit_triggers` has a real home in the new format: body `## Revisit if`
+//   (redesign spec — it replaces both the old Assumptions section and the
+//   `revisit_triggers:` field). We append a stub section; pass 2 reorders it to
+//   canonical position and merges it with any body `## Assumptions` triggers.
+// - `reversibility` is a killed field, subsumed by `conviction`. Its only
+//   carryable content is the "hard to undo" case, which the spec says becomes a
+//   `## Commitments` bullet when it matters. We surface just that case as a
+//   strippable hint rather than dropping it silently. Easily-reversible values
+//   carry nothing (there is genuinely nothing to preserve).
+const HARD_TO_UNDO = new Set(["low", "hard", "difficult", "irreversible"]);
+
+export function appendMigrationCarry(body: string, data: Record<string, unknown>): string {
+  const triggers = Array.isArray(data.revisit_triggers)
+    ? data.revisit_triggers.filter((x): x is string => typeof x === "string" && x.trim() !== "")
+    : [];
+  const reversibility = typeof data.reversibility === "string" ? data.reversibility.trim() : "";
+  const carryReversibility = reversibility !== "" && HARD_TO_UNDO.has(reversibility.toLowerCase());
+
+  if (triggers.length === 0 && !carryReversibility) return body;
+
+  const parts: string[] = [body.replace(/\s+$/, "")];
+  if (triggers.length > 0) {
+    parts.push("## Revisit if\n\n" + triggers.map((t) => `- ${t}`).join("\n"));
+  }
+  if (carryReversibility) {
+    parts.push(
+      `<!-- migrate: reversibility was "${reversibility}" (hard to undo); ` +
+        `add a ## Commitments bullet if it still matters, then delete this comment. -->`,
+    );
+  }
+  return parts.join("\n\n") + "\n";
 }
 
 // Strip Obsidian callout syntax in place: the `> [!info]- Title` marker line is
