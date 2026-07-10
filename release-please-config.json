@@ -3,6 +3,15 @@
   "release-type": "node",
   "initial-version": "0.1.0",
   "packages": {
-    ".": {}
+    ".": {
+      "release-as": "1.0.0",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "plugins/ndr/.claude-plugin/plugin.json",
+          "jsonpath": "$.version"
+        }
+      ]
+    }
   }
 }
