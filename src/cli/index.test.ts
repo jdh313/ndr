@@ -10,6 +10,7 @@ import { asAtomId } from "../domain/index.ts";
 import { draftFor } from "../test/helpers.ts";
 import {
   captureCommand,
+  maybeConvertMarkdownDraft,
   currentCommand,
   doctorCommand,
   initCommand,
@@ -335,6 +336,57 @@ describe("ndr capture", () => {
     const result = await captureCommand("{not json", tmp);
     expect(result.exitCode).toBe(1);
     expect(JSON.parse(result.stderr).error.kind).toBe("bad_json");
+  });
+
+  test("a markdown draft file (--- fence) captures like the JSON wire shape", async () => {
+    const draftMd = `---
+title: Use FastAPI
+status: current
+decision_date: "2026-05-15"
+author: Jacob Hoehler
+conviction: tentative
+project: "[[Auth]]"
+labels: ["substrate"]
+supersedes: []
+---
+# PLACEHOLDER — Use FastAPI
+
+## Decision
+
+Use FastAPI.
+`;
+    const result = await captureCommand(maybeConvertMarkdownDraft(draftMd), tmp);
+    expect(result.exitCode).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.id).toMatch(/^[0-9a-z]{6}$/);
+    expect(parsed.path).toBe(`${parsed.id}-use-fastapi.md`);
+
+    // H1 patched to the minted id in the written atom.
+    const written = await fs.readFile(path.join(tmp, parsed.path), "utf8");
+    expect(written).toContain(`# ${parsed.id} — Use FastAPI`);
+  });
+
+  test("a markdown draft's stray placeholder id is stripped so the mint path runs", () => {
+    const draftMd = `---
+id: "TBD — assigned by ndr capture"
+title: Use FastAPI
+labels: ["substrate"]
+---
+# PLACEHOLDER — Use FastAPI
+
+## Decision
+
+Use FastAPI.
+`;
+    const converted = JSON.parse(maybeConvertMarkdownDraft(draftMd));
+    expect(converted.frontmatter.id).toBeUndefined();
+    expect(converted.frontmatter.title).toBe("Use FastAPI");
+    expect(converted.body).toContain("# PLACEHOLDER — Use FastAPI");
+  });
+
+  test("a JSON draft is passed through unchanged (no --- sentinel)", () => {
+    const json = draftJson();
+    expect(maybeConvertMarkdownDraft(json)).toBe(json);
   });
 
   test("a taxonomy violation exits 1 with a validation error", async () => {
