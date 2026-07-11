@@ -1067,6 +1067,15 @@ describe("ndr status", () => {
     expect(result.stdout).toContain("ndr init");
   });
 
+  test("a present-but-broken .ndr.toml (missing project) reports none without throwing", async () => {
+    // Requiring `project` makes a projectless config broken; `status` is the
+    // command run to diagnose it, so it must degrade — not crash (vy8yvk).
+    await fs.writeFile(path.join(tmp, ".ndr.toml"), 'ledger = "./decisions"\n', "utf8");
+    const result = await statusCommand(tmp, { json: true });
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).ledger.source).toBe("none");
+  });
+
   test("an explicit --ledger is reported as source flag", async () => {
     const out = JSON.parse((await statusCommand(tmp, { ledger: FIXTURES, json: true })).stdout);
     expect(out.ledger.source).toBe("flag");

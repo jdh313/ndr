@@ -61,7 +61,7 @@ catch-all is just a `.ndr.toml` higher up the walk (e.g. at `~`).
 ```toml
 # .ndr.toml — written by `ndr init`
 ledger = "./decisions"   # required; relative paths resolve against this file, ~/ expands
-project = "my-repo"      # optional; free-form (defaults to the directory name)
+project = "my-repo"      # required; free-form (`ndr init` defaults it to the directory name)
 ```
 
 Every atom's frontmatter follows one strict schema:

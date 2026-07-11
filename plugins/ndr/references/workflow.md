@@ -34,7 +34,7 @@ Every verb resolves its ledger the same way:
 
 ```toml
 ledger = "./decisions"     # required; relative paths resolve against this file's directory, ~/ expands
-project = "my-repo"    # optional; plain-string project name for atoms in this repo
+project = "my-repo"    # required; plain-string project name (`ndr init` defaults it to the directory name)
 ```
 
 A personal catch-all ledger is just a `.ndr.toml` higher up the walk (e.g. at `~`, pointing wherever that corpus lives). A present-but-broken `.ndr.toml` fails loudly rather than silently falling back.

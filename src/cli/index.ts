@@ -572,7 +572,16 @@ export interface StatusOptions {
 // Unlike the read verbs this never throws on an unconfigured repo — reporting
 // "none" is the whole point.
 export async function statusCommand(cwd: string, opts: StatusOptions = {}): Promise<ResolveResult> {
-  const resolved: ResolvedLedger = resolveLedgerInfo(opts.ledger, cwd);
+  // A present-but-broken .ndr.toml (bad TOML, missing/empty required key) must
+  // not crash `status` (vy8yvk) — resolution throws on a broken config just as
+  // findRepoConfig does, so guard it and degrade to `none`, same as
+  // findRepoConfigSafe below.
+  let resolved: ResolvedLedger;
+  try {
+    resolved = resolveLedgerInfo(opts.ledger, cwd);
+  } catch {
+    resolved = { path: "", source: { kind: "none" } };
+  }
   const config = findRepoConfigSafe(cwd);
   const project = config?.project;
 
