@@ -27,7 +27,7 @@ async function writeConfig(dir: string, content: string): Promise<string> {
 }
 
 describe("parseRepoConfig", () => {
-  test("absolute ledger passes through; project is optional", () => {
+  test("absolute ledger and project pass through", () => {
     const config = parseRepoConfig(
       path.join(tmp, CONFIG_BASENAME),
       'ledger = "/somewhere/decisions"\nproject = "[[ndr]]"\n',
@@ -37,16 +37,31 @@ describe("parseRepoConfig", () => {
   });
 
   test("relative ledger resolves against the config file's directory", () => {
-    const config = parseRepoConfig(path.join(tmp, CONFIG_BASENAME), 'ledger = "./decisions"\n');
+    const config = parseRepoConfig(
+      path.join(tmp, CONFIG_BASENAME),
+      'ledger = "./decisions"\nproject = "p"\n',
+    );
     expect(config.ledger).toBe(path.join(tmp, "decisions"));
   });
 
   test("a leading ~/ expands to the home directory", () => {
     const config = parseRepoConfig(
       path.join(tmp, CONFIG_BASENAME),
-      'ledger = "~/Loose Ends/Decisions"\n',
+      'ledger = "~/Loose Ends/Decisions"\nproject = "p"\n',
     );
     expect(config.ledger).toBe(path.join(os.homedir(), "Loose Ends", "Decisions"));
+  });
+
+  test("missing project key throws RepoConfigError (mirrors the atom schema, ndr:0130)", () => {
+    expect(() =>
+      parseRepoConfig(path.join(tmp, CONFIG_BASENAME), 'ledger = "./decisions"\n'),
+    ).toThrow(RepoConfigError);
+  });
+
+  test("empty project string throws RepoConfigError", () => {
+    expect(() =>
+      parseRepoConfig(path.join(tmp, CONFIG_BASENAME), 'ledger = "./decisions"\nproject = ""\n'),
+    ).toThrow(RepoConfigError);
   });
 
   test("missing ledger key throws RepoConfigError", () => {
@@ -70,13 +85,13 @@ describe("parseRepoConfig", () => {
 
 describe("findRepoConfig", () => {
   test("finds .ndr.toml in the start directory", async () => {
-    await writeConfig(tmp, 'ledger = "./decisions"\n');
+    await writeConfig(tmp, 'ledger = "./decisions"\nproject = "p"\n');
     const config = findRepoConfig(tmp);
     expect(config?.ledger).toBe(path.join(tmp, "decisions"));
   });
 
   test("walks up from a nested directory to the repo root", async () => {
-    await writeConfig(tmp, 'ledger = "./decisions"\n');
+    await writeConfig(tmp, 'ledger = "./decisions"\nproject = "p"\n');
     const nested = path.join(tmp, "src", "deep", "deeper");
     await fs.mkdir(nested, { recursive: true });
     const config = findRepoConfig(nested);
@@ -85,10 +100,10 @@ describe("findRepoConfig", () => {
   });
 
   test("the nearest config wins when ancestors also carry one", async () => {
-    await writeConfig(tmp, 'ledger = "./outer"\n');
+    await writeConfig(tmp, 'ledger = "./outer"\nproject = "p"\n');
     const inner = path.join(tmp, "subrepo");
     await fs.mkdir(inner);
-    await writeConfig(inner, 'ledger = "./inner"\n');
+    await writeConfig(inner, 'ledger = "./inner"\nproject = "p"\n');
     const config = findRepoConfig(inner);
     expect(config?.ledger).toBe(path.join(inner, "inner"));
   });
@@ -102,12 +117,12 @@ describe("findRepoConfig", () => {
 
 describe("resolveLedgerPath", () => {
   test("the --ledger flag wins over a present .ndr.toml", async () => {
-    await writeConfig(tmp, 'ledger = "./decisions"\n');
+    await writeConfig(tmp, 'ledger = "./decisions"\nproject = "p"\n');
     expect(resolveLedgerPath("/flag/wins", tmp)).toBe("/flag/wins");
   });
 
   test("a .ndr.toml resolves when no flag is passed", async () => {
-    await writeConfig(tmp, 'ledger = "./decisions"\n');
+    await writeConfig(tmp, 'ledger = "./decisions"\nproject = "p"\n');
     expect(resolveLedgerPath(undefined, tmp)).toBe(path.join(tmp, "decisions"));
   });
 
@@ -130,7 +145,7 @@ describe("NDR_LEDGER env in resolution", () => {
   });
 
   test("env overrides a present .ndr.toml", async () => {
-    await writeConfig(tmp, 'ledger = "./decisions"\n');
+    await writeConfig(tmp, 'ledger = "./decisions"\nproject = "p"\n');
     process.env.NDR_LEDGER = "/env/wins";
     expect(resolveLedgerPath(undefined, tmp)).toBe("/env/wins");
     expect(resolveLedger(undefined, tmp)).toEqual({ path: "/env/wins", source: { kind: "env" } });
@@ -144,7 +159,7 @@ describe("NDR_LEDGER env in resolution", () => {
 
   test("resolveLedger reports the config source and `none` without throwing", async () => {
     delete process.env.NDR_LEDGER;
-    const cfg = await writeConfig(tmp, 'ledger = "./decisions"\n');
+    const cfg = await writeConfig(tmp, 'ledger = "./decisions"\nproject = "p"\n');
     expect(resolveLedger(undefined, tmp)).toEqual({
       path: path.join(tmp, "decisions"),
       source: { kind: "config", configPath: cfg },

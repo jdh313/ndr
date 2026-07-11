@@ -17,7 +17,10 @@ export interface RepoConfig {
   // Absolute. Relative `ledger` values resolve against the config file's
   // directory; a leading `~/` expands to the home directory.
   readonly ledger: string;
-  readonly project?: string;
+  // Required, mirroring the atom frontmatter schema (`schema.ts` requires a
+  // non-empty `project` on every atom, per ndr:0130). A `.ndr.toml` missing
+  // `project` is broken and fails loudly rather than resolving projectless.
+  readonly project: string;
   readonly configPath: string;
 }
 
@@ -43,8 +46,10 @@ export function parseRepoConfig(configPath: string, raw: string): RepoConfig {
   }
 
   const project = table["project"];
-  if (project !== undefined && typeof project !== "string") {
-    throw new RepoConfigError(`invalid config in ${configPath}: "project" must be a string`);
+  if (typeof project !== "string" || project.length === 0) {
+    throw new RepoConfigError(
+      `invalid config in ${configPath}: "project" must be a non-empty string`,
+    );
   }
 
   const expanded = ledger.startsWith("~/") ? path.join(os.homedir(), ledger.slice(2)) : ledger;
