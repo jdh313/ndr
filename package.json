@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit",
     "build": "bun build --compile src/cli/bin.ts --outfile dist/ndr",
     "install:bin": "bun run build && ln -sf \"$PWD/dist/ndr\" ~/.local/bin/ndr",
+    "validate:plugin": "bun run scripts/validate-codex-plugin.ts",
     "prepare": "git config core.hooksPath .githooks"
   },
   "dependencies": {

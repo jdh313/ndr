@@ -1,0 +1,5 @@
+interface:
+  display_name: Migrate Ledger
+  short_description: Migrate an old-format NDR ledger explicitly
+policy:
+  allow_implicit_invocation: false

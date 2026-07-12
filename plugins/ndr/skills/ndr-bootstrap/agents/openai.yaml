@@ -1,0 +1,5 @@
+interface:
+  display_name: NDR Bootstrap
+  short_description: Install NDR vault seed content explicitly
+policy:
+  allow_implicit_invocation: false

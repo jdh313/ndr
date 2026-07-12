@@ -1,6 +1,6 @@
 # ndr — Nested Decision Records
 
-A Claude Code plugin for capturing engineering decisions as **atomic markdown
+A Claude Code and Codex plugin for capturing engineering decisions as **atomic markdown
 files** with explicit lineage and **supersession-aware reading**, so
 cross-session decision drift becomes structurally visible rather than something
 you rediscover in hindsight.
@@ -24,14 +24,24 @@ and the shared ledger/config model, see the [repo-root README](../../README.md).
 ## Install
 
 The plugin requires the `ndr` binary on PATH — skills hard-error without it.
-Clone the repo and build it (`bun run install:bin`), then add the marketplace
-from GitHub:
+Clone the repo and build it (`bun run install:bin`), then add the marketplace:
 
 ```
 /plugin marketplace add jdh313/ndr
 /plugin install ndr@ndr
 /ndr-bootstrap
 ```
+
+For local Codex development:
+
+```sh
+codex plugin marketplace add /Users/jacob/Projects/ndr
+codex plugin add ndr@ndr
+```
+
+Open a fresh Codex task after installation or an update so the installed skills
+reload. In Codex, invoke installed `ndr:<skill>` skills; the shared role files
+under `agents/` are bounded subagent procedures, not registered agents.
 
 After install:
 - Decisions live as `<ledger>/<id>-<kebab-title>.md` — one atom per file, always
@@ -60,6 +70,9 @@ tracked repo. See `references/workflow.md#opting-a-repo-into-ndr-coverage`.
 plugins/ndr/
 ├── .claude-plugin/
 │   └── plugin.json
+├── .codex-plugin/
+│   └── plugin.json
+├── RUNTIME.md                # Claude/Codex behavior mapping
 ├── README.md                  # this file
 ├── skills/
 │   ├── capture-decision/      # write-side (persists via `ndr capture`)
@@ -87,6 +100,27 @@ plugins/ndr/
 
 The CLI itself lives in this repo's `src/` (Commander entry points, domain
 types, markdown ledger adapter) — see the [root README](../../README.md).
+
+## Dual-agent operation
+
+- Canonical bodies: `skills/`, `agents/`, references, and assets are shared.
+  Keep workflow logic there; native manifests stay thin.
+- Runtime mappings: Codex follows the same `SKILL.md` procedure, maps `@ndr-*`
+  roles to bounded subagents using the matching role file, and uses its plan and
+  structured-input facilities in place of Claude-only orchestration.
+- Explicit skills: `migrate-ledger` and `ndr-bootstrap` carry Codex
+  `agents/openai.yaml` policies that disable implicit invocation.
+- Connectors: the optional Obsidian source-read path needs an equivalent
+  connected Codex app/MCP operation. Do not replace unavailable private-data
+  access with web search or model memory.
+- Validation: run `bun run validate:plugin` for marketplace structure, manifest
+  parity, and all NDR skill frontmatter; run the standard Bun suite afterward.
+- Smoke tests: start a fresh task and test `decisions`, `ground`, and
+  `drift-check` read-only. Use `capture-decision`, supersession, migration, or
+  bootstrap writes only with explicit approval.
+
+See [RUNTIME.md](./RUNTIME.md) for the complete mapping. The Claude SessionStart
+hook remains Claude-native; Codex uses the skill's `ndr`-on-PATH preflight.
 
 ## Conventions
 

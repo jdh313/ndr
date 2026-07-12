@@ -1,0 +1,33 @@
+{
+  "name": "ndr",
+  "version": "1.0.0-beta",
+  "description": "Nested decision records: capture atomic decisions, resolve supersession-aware history, and check code against current decision heads through the ndr CLI.",
+  "author": {
+    "name": "Jacob Hoehler"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "decisions",
+    "adrs",
+    "engineering",
+    "supersession",
+    "architecture"
+  ],
+  "interface": {
+    "displayName": "NDR",
+    "shortDescription": "Capture and resolve engineering decisions",
+    "longDescription": "Decision-record workflows backed by the ndr CLI, with supersession-aware reads and protected capture writes.",
+    "developerName": "Jacob Hoehler",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write",
+      "Interactive"
+    ],
+    "defaultPrompt": [
+      "Ground this work in the relevant NDR decisions.",
+      "What did we decide about this topic?",
+      "Capture the decision we reached in this conversation."
+    ]
+  }
+}

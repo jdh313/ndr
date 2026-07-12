@@ -31,6 +31,8 @@ jobs:
 
       - run: bun run typecheck
 
+      - run: bun run validate:plugin
+
       # smoke: bun build --compile on the ubuntu runner (ndr:0128
       # bun-build-targets-stable assumption); artifact not uploaded
       - run: bun run build

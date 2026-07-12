@@ -176,8 +176,8 @@ The CLI sits on a small library you can import directly:
 
 ## Plugin
 
-A Claude Code plugin (skills `/decisions`, `/ground`, `/capture-decision`,
-`/drift-check`, plus supporting agents) is co-located in `plugins/ndr/` and
+An NDR plugin (skills `/decisions`, `/ground`, `/capture-decision`,
+`/drift-check`, plus supporting procedures) is co-located in `plugins/ndr/` and
 served from this repo's own marketplace. The skills are thin orchestration over
 this CLI.
 
@@ -190,6 +190,39 @@ The plugin requires the `ndr` binary on PATH — build it from a clone with
 `bun run install:bin` (the skills hard-error without it). See
 [plugins/ndr/README.md](./plugins/ndr/README.md).
 
+### Claude and Codex operating model
+
+- Shared ownership: `plugins/ndr/skills/`, `agents/`, references, and assets
+  are canonical. Claude and Codex only add thin manifests and runtime adapters.
+- Manifests: Claude uses `plugins/ndr/.claude-plugin/plugin.json` and Codex uses
+  `plugins/ndr/.codex-plugin/plugin.json`; their name and version must match.
+- Runtime: Claude registered agents map to bounded Codex subagents using the
+  same `agents/ndr-*.md` procedures. Claude questions/plans/skill handoffs map
+  to native Codex structured input, plans, and installed `ndr:<skill>` skills.
+  See [plugins/ndr/RUNTIME.md](./plugins/ndr/RUNTIME.md).
+- Integrations: NDR itself requires `ndr` on PATH. The optional Obsidian source
+  read used by `ndr-extractor` requires an equivalent connected app/MCP tool;
+  credentials stay with that integration.
+
+Install from this local checkout:
+
+```sh
+# Claude Code
+/plugin marketplace add jdh313/ndr
+/plugin install ndr@ndr
+
+# Codex
+codex plugin marketplace add /Users/jacob/Projects/ndr
+codex plugin add ndr@ndr
+```
+
+Open a fresh task after Codex installation or update. Validate both native
+surfaces with `bun run validate:plugin`; then run the normal project suite
+(`bun test`, `bun run lint`, `bun run format:check`, and `bun run typecheck`).
+Smoke tests start read-only: use `ndr:decisions`, `ndr:ground`, and
+`ndr:drift-check`; use `ndr:capture-decision` only when a ledger write is
+explicitly approved. Claude-only hooks remain Claude-native.
+
 ## Contributing
 
 ### Layout
@@ -201,8 +234,8 @@ src/
   ports/      ReadPort, WritePort interfaces
   adapters/   Backend implementations (markdown filesystem, ...)
 plugins/
-  ndr/        Claude Code plugin (skills + agents), served from
-              .claude-plugin/marketplace.json at the repo root
+  ndr/        Dual Claude/Codex plugin (shared skills + procedures), served from
+              .claude-plugin/marketplace.json and .agents/plugins/marketplace.json
 ```
 
 ### Development
