@@ -212,7 +212,7 @@ Install from this local checkout:
 /plugin install ndr@ndr
 
 # Codex
-codex plugin marketplace add /Users/jacob/Projects/ndr
+codex plugin marketplace add /path/to/ndr
 codex plugin add ndr@ndr
 ```
 

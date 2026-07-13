@@ -7,6 +7,7 @@ const marketplacePath = resolve(repoRoot, ".agents/plugins/marketplace.json");
 const claudeMarketplacePath = resolve(repoRoot, ".claude-plugin/marketplace.json");
 const semver =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+const explicitOnlySkills = new Set(["migrate-ledger", "ndr-bootstrap"]);
 
 type Json = Record<string, unknown>;
 
@@ -44,6 +45,16 @@ async function json(path: string): Promise<Json | undefined> {
   } catch (error) {
     errors.push(
       `${path} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+async function yaml(path: string): Promise<Json | undefined> {
+  try {
+    return object(YAML.parse(await Bun.file(path).text()), path);
+  } catch (error) {
+    errors.push(
+      `${path} is not valid YAML: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }
@@ -127,7 +138,15 @@ if (marketplace) {
       for (const skill of await readdir(skillsDir, { withFileTypes: true })) {
         if (!skill.isDirectory()) continue;
         const skillPath = resolve(skillsDir, skill.name, "SKILL.md");
-        const contents = await Bun.file(skillPath).text();
+        let contents: string;
+        try {
+          contents = await Bun.file(skillPath).text();
+        } catch (error) {
+          errors.push(
+            `${skillPath} is missing or unreadable: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          continue;
+        }
         const match = contents.match(/^---\n([\s\S]*?)\n---\n/);
         if (!match) {
           errors.push(`${skillPath} has no YAML frontmatter`);
@@ -143,6 +162,14 @@ if (marketplace) {
           errors.push(
             `${skillPath} has invalid YAML frontmatter: ${error instanceof Error ? error.message : String(error)}`,
           );
+        }
+
+        if (!explicitOnlySkills.has(skill.name)) continue;
+        const agentPath = resolve(skillsDir, skill.name, "agents/openai.yaml");
+        const agent = await yaml(agentPath);
+        const policy = agent && object(agent.policy, `${agentPath} policy`);
+        if (policy?.allow_implicit_invocation !== false) {
+          errors.push(`${agentPath} policy.allow_implicit_invocation must be false`);
         }
       }
     }

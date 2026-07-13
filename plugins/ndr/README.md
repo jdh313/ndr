@@ -35,7 +35,7 @@ Clone the repo and build it (`bun run install:bin`), then add the marketplace:
 For local Codex development:
 
 ```sh
-codex plugin marketplace add /Users/jacob/Projects/ndr
+codex plugin marketplace add /path/to/ndr
 codex plugin add ndr@ndr
 ```
 

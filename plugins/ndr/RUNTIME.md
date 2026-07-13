@@ -17,7 +17,8 @@ substantive instructions by runtime.
 
 Claude expands `${CLAUDE_PLUGIN_ROOT}` in shared bodies. In Codex, interpret it
 as the installed NDR plugin root: locate the active `SKILL.md`, then use its
-parent's parent as the root. Resolve `references/` and `assets/` from that root.
+parent's parent's parent as the root. Resolve `references/` and `assets/` from
+that root.
 Do not infer NDR atom content by reading a ledger file directly; the `ndr` CLI
 remains the read and write boundary.
 

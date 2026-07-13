@@ -10,8 +10,8 @@
   "scripts": {
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "format": "oxfmt src",
-    "format:check": "oxfmt --check src",
+    "format": "oxfmt src scripts",
+    "format:check": "oxfmt --check src scripts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "build": "bun build --compile src/cli/bin.ts --outfile dist/ndr",
