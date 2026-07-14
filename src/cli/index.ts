@@ -282,7 +282,12 @@ export async function run(argv: readonly string[]): Promise<number> {
     )
     .option("--json", "Emit a structured JSON summary.", false)
     .action(
-      async (options: { ledger?: string; dryRun: boolean; applyBodies?: string; json: boolean }) => {
+      async (options: {
+        ledger?: string;
+        dryRun: boolean;
+        applyBodies?: string;
+        json: boolean;
+      }) => {
         if (options.applyBodies !== undefined) {
           emit(await applyBodiesCommand(options.applyBodies, { json: options.json }));
           return;
@@ -291,7 +296,9 @@ export async function run(argv: readonly string[]): Promise<number> {
         if (ledger === null) return;
         const config = findRepoConfigSafe(process.cwd());
         const repoRoot = config ? path.dirname(config.configPath) : null;
-        emit(await migrateCommand(ledger, repoRoot, { dryRun: options.dryRun, json: options.json }));
+        emit(
+          await migrateCommand(ledger, repoRoot, { dryRun: options.dryRun, json: options.json }),
+        );
       },
     );
 
