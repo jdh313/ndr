@@ -2,7 +2,7 @@
 id: "0060"
 title: Drift-check in ndr audits current heads only; amend semantics land as a
   successor atom
-status: current
+status: superseded
 decision_date: 2026-05-17
 author: Jacob Hoehler
 conviction: tentative
@@ -12,7 +12,8 @@ labels:
   - supersession
 binds: []
 supersedes: []
-superseded_by: []
+superseded_by:
+  - 97s529
 derived_from: []
 informed_by:
   - "0059"
