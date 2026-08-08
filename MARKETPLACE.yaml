@@ -1,0 +1,30 @@
+schema: agentforge.marketplace/v1
+id: ndr
+defaults:
+  name: ndr
+  description: Nested decision records — the ndr dual-runtime plugin
+  owner:
+    name: Jacob Hoehler
+packages:
+  - plugins/*/PACKAGE.yaml
+publications:
+  - id: claude
+    target: claude
+    destination: .claude-plugin/marketplace.json
+    enrollment:
+      mode: all-compatible
+    native:
+      metadata:
+        description: Nested decision records for Claude Code
+        version: 1.0.0
+  - id: codex
+    target: codex
+    destination: .agents/plugins/marketplace.json
+    # A package's own `targets.codex` block is the single declaration of Codex
+    # support. An explicit include list here would be a second copy of that
+    # fact, and the compiler hard-errors when the two disagree.
+    enrollment:
+      mode: all-compatible
+    native:
+      interface:
+        displayName: NDR
