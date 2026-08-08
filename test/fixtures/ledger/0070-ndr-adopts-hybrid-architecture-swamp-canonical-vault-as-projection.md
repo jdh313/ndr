@@ -5,7 +5,7 @@ status: superseded
 decision_date: '2026-05-18'
 author: "Jacob Hoehler"
 conviction: strong
-project: '[[Decision Pipeline]]'
+project: "Decision Pipeline"
 derived_from: []
 informed_by: []
 labels:

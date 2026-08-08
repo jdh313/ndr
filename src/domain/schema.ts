@@ -34,7 +34,16 @@ export const FrontmatterSchema = z
     author: z.string().min(1),
     conviction: ConvictionSchema,
 
-    project: z.string().min(1),
+    // Plain string, never the pre-migration wikilink form. Rejected rather
+    // than stripped: source data gets fixed, the schema does not coerce
+    // (ndr:0139). `ndr migrate` strips the brackets on the migration path.
+    project: z
+      .string()
+      .min(1)
+      .refine((v) => !/^\[\[.*\]\]$/.test(v), {
+        message:
+          "project must be a plain string, not a wikilink — write `ndr`, not `[[ndr]]`",
+      }),
 
     labels: z.array(z.string().min(1)).min(1).max(4),
     binds: z.array(z.string().min(1)).default([]),
