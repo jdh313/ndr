@@ -201,9 +201,18 @@ src/
   ports/      ReadPort, WritePort interfaces
   adapters/   Backend implementations (markdown filesystem, ...)
 plugins/
-  ndr/        Claude Code plugin (skills + agents), served from
-              .claude-plugin/marketplace.json at the repo root
+  ndr/        Claude Code plugin source (skills, agents, hooks,
+              references, assets) + PACKAGE.yaml
+MARKETPLACE.yaml   Canonical marketplace definition
+marketplaces/      Committed AgentForge output — never hand-edited
+  claude/          Claude marketplace root (add this path, not the repo root)
+  codex/           Codex registry
 ```
+
+Plugin and marketplace metadata live only in `MARKETPLACE.yaml` and
+`plugins/ndr/PACKAGE.yaml`; everything under `marketplaces/` is compiled from
+them. See [CLAUDE.md](CLAUDE.md#plugin-metadata-ownership) for the recompile
+recipe and the pinned-compiler requirement.
 
 ### Development
 
@@ -216,7 +225,9 @@ bun run typecheck
 ```
 
 CI (GitHub Actions) runs the same gates — test, lint, `format:check`,
-typecheck, plus a `bun build --compile` smoke — on every push and PR to `main`.
+typecheck, plus a `bun build --compile` smoke — on every PR to `main` and `dev`.
+A second job recompiles `marketplaces/` through a pinned AgentForge and fails on
+any drift from the committed output.
 
 ### Build & install
 
