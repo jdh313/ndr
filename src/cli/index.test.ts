@@ -48,7 +48,7 @@ function draftJson(fm: Record<string, unknown> = {}): string {
       decision_date: "2026-05-15",
       author: "Jacob Hoehler",
       conviction: "tentative",
-      project: "[[Auth]]",
+      project: "Auth",
       labels: ["substrate"],
       supersedes: [],
       ...fm,
@@ -345,7 +345,7 @@ status: current
 decision_date: "2026-05-15"
 author: Jacob Hoehler
 conviction: tentative
-project: "[[Auth]]"
+project: "Auth"
 labels: ["substrate"]
 supersedes: []
 ---
@@ -398,7 +398,7 @@ Use FastAPI.
   test("an already-superseded predecessor exits 2", async () => {
     await fs.writeFile(
       path.join(tmp, "0001-old.md"),
-      '---\nid: "0001"\ntitle: Old\nstatus: superseded\ndecision_date: 2026-01-01\nauthor: "Jacob Hoehler"\nconviction: tentative\nproject: "[[X]]"\nlabels: ["framework"]\nsupersedes: []\nsuperseded_by: ["0050"]\n---\nbody\n',
+      '---\nid: "0001"\ntitle: Old\nstatus: superseded\ndecision_date: 2026-01-01\nauthor: "Jacob Hoehler"\nconviction: tentative\nproject: "X"\nlabels: ["framework"]\nsupersedes: []\nsuperseded_by: ["0050"]\n---\nbody\n',
       "utf8",
     );
     const result = await captureCommand(draftJson({ supersedes: ["0001"] }), tmp);
@@ -481,7 +481,7 @@ Use FastAPI.
         decision_date: "2026-06-07",
         author: "Jacob Hoehler",
         conviction: "tentative",
-        project: "[[t]]",
+        project: "t",
         labels: ["framework"],
       },
       body: "\n# PLACEHOLDER — Minimal\n\n## Decision\n\nMinimal.\n",
@@ -547,7 +547,7 @@ describe("ndr doctor", () => {
       decision_date: "2026-06-01",
       author: "Jacob Hoehler",
       conviction: "strong",
-      project: "[[Doctor Fixture]]",
+      project: "Doctor Fixture",
       labels: ["tooling"],
       binds: [] as string[],
       supersedes: [] as string[],
@@ -673,7 +673,7 @@ describe("ndr doctor", () => {
     const patched = await adapter.getAtom(asAtomId("0001"));
     expect(patched.frontmatter.superseded_by).toEqual(["0002"]);
     // Untouched frontmatter keeps its original values (ndr:0134).
-    expect(patched.frontmatter.project).toBe("[[Doctor Fixture]]");
+    expect(patched.frontmatter.project).toBe("Doctor Fixture");
 
     // Second --fix run: nothing left to repair, ledger untouched.
     const before = await snapshotLedger(tmp);

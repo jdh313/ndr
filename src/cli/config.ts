@@ -51,6 +51,13 @@ export function parseRepoConfig(configPath: string, raw: string): RepoConfig {
       `invalid config in ${configPath}: "project" must be a non-empty string`,
     );
   }
+  // Pre-migration ledgers carry `project = "[[name]]"`. Atoms want the plain
+  // form, so a stale config here silently seeds an invalid atom field.
+  if (/^\[\[.*\]\]$/.test(project)) {
+    throw new RepoConfigError(
+      `invalid config in ${configPath}: "project" must be a plain string, not a wikilink — write \`${project.slice(2, -2)}\`, not \`${project}\``,
+    );
+  }
 
   const expanded = ledger.startsWith("~/") ? path.join(os.homedir(), ledger.slice(2)) : ledger;
   const absolute = path.isAbsolute(expanded)

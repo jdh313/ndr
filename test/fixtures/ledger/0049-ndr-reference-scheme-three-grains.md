@@ -5,7 +5,7 @@ status: current
 decision_date: 2026-05-15
 author: "Jacob Hoehler"
 conviction: strong
-project: "[[Decision Pipeline]]"
+project: "Decision Pipeline"
 derived_from:
   - "[[Personal/Projects/Decision Pipeline — Reference Addressability]]"
 informed_by: []

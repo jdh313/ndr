@@ -51,6 +51,11 @@ describe("FrontmatterSchema", () => {
     expect(FrontmatterSchema.safeParse({ ...valid, labels }).success).toBe(false);
   });
 
+  test("project must be a plain string, not a wikilink", () => {
+    expect(FrontmatterSchema.safeParse({ ...valid, project: "[[ndr]]" }).success).toBe(false);
+    expect(FrontmatterSchema.safeParse({ ...valid, project: "ndr" }).success).toBe(true);
+  });
+
   test("supersedes entries must be atom ids, not wikilinks", () => {
     const bad = { ...valid, supersedes: ["[[Decisions/0072-old-atom]]"] };
     expect(FrontmatterSchema.safeParse(bad).success).toBe(false);
