@@ -345,7 +345,9 @@ describe("ndr migrate --apply-bodies", () => {
     // A JSON string that itself contains the JSON payload.
     await fs.writeFile(
       bodiesPath,
-      JSON.stringify(JSON.stringify({ atoms: [{ path: atomPath, body: "# t\n\n## Decision\n\nX" }] })),
+      JSON.stringify(
+        JSON.stringify({ atoms: [{ path: atomPath, body: "# t\n\n## Decision\n\nX" }] }),
+      ),
       "utf8",
     );
 

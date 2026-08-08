@@ -128,7 +128,11 @@ export async function applyBodiesCommand(
   try {
     rawJson = await fs.readFile(path.resolve(jsonPath), "utf8");
   } catch (err) {
-    return { stdout: "", stderr: `cannot read bodies file ${jsonPath}: ${asMsg(err)}\n`, exitCode: 1 };
+    return {
+      stdout: "",
+      stderr: `cannot read bodies file ${jsonPath}: ${asMsg(err)}\n`,
+      exitCode: 1,
+    };
   }
 
   let parsed: unknown;
@@ -143,7 +147,11 @@ export async function applyBodiesCommand(
 
   const atoms = (parsed as { atoms?: unknown }).atoms;
   if (!Array.isArray(atoms)) {
-    return { stdout: "", stderr: `bodies file must be an object with an "atoms" array\n`, exitCode: 1 };
+    return {
+      stdout: "",
+      stderr: `bodies file must be an object with an "atoms" array\n`,
+      exitCode: 1,
+    };
   }
 
   const applied: string[] = [];
