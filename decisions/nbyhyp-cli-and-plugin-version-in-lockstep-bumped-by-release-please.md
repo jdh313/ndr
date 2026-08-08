@@ -11,7 +11,8 @@ labels:
   - deployment
 binds:
   - release-please-config.json
-  - plugins/ndr/.claude-plugin/plugin.json
+  - release-please-config-dev.json
+  - plugins/ndr/PACKAGE.yaml
 supersedes: []
 superseded_by: []
 derived_from:

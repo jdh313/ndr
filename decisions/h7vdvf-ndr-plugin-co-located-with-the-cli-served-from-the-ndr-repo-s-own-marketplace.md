@@ -1,7 +1,7 @@
 ---
 id: "h7vdvf"
 title: ndr plugin co-located with the CLI, served from the ndr repo's own marketplace
-status: current
+status: superseded
 decision_date: 2026-06-04
 author: Jacob Hoehler
 conviction: tentative
@@ -11,7 +11,8 @@ labels:
   - deployment
 binds: []
 supersedes: []
-superseded_by: []
+superseded_by:
+  - 0yb8xb
 derived_from: []
 informed_by:
   - "0129"
