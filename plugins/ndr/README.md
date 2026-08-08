@@ -58,22 +58,31 @@ tracked repo. See `references/workflow.md#opting-a-repo-into-ndr-coverage`.
 
 ```
 plugins/ndr/
-├── .claude-plugin/
-│   └── plugin.json
-├── README.md                  # this file
+├── PACKAGE.yaml               # canonical definition; plugin.json is generated
+├── README.md                  # this file (not shipped in the payload)
 ├── skills/
 │   ├── capture-decision/      # write-side (persists via `ndr capture`)
 │   ├── decisions/             # read-side, user-driven (resolves via `ndr resolve`)
 │   ├── ground/                # read-side, active-work grounding for coding agents
 │   ├── drift-check/           # code-vs-decision coherence (on-demand)
+│   ├── interrogate-decision/  # deep pre-capture deliberation
+│   ├── migrate-ledger/        # one-time, retirable format migration
 │   └── ndr-bootstrap/         # one-time vault content install
 ├── agents/
 │   ├── ndr-curator.md         # corpus health
 │   ├── ndr-drafter.md         # atom drafting
 │   ├── ndr-drift-auditor.md   # code-vs-decision walk + compare
 │   ├── ndr-extractor.md       # candidate extraction from long sources
+│   ├── ndr-migrator.md        # body reshaping for the format migration
 │   ├── ndr-reader.md          # free-text search + synthesis over the ndr CLI
 │   └── ndr-reviewer.md        # pre-write atom validation
+├── hooks/
+│   ├── hooks.json             # SessionStart
+│   └── check-cli-version.sh   # flags an outdated ndr binary
+├── assets/                    # installed by /ndr-bootstrap
+│   ├── decisions/             # seed atoms
+│   ├── taxonomy/labels.yaml
+│   └── project-snippet/
 ├── references/                # static schema + workflow docs + template
 │   ├── frontmatter-schema.md
 │   ├── taxonomy.md

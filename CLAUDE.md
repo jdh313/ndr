@@ -49,8 +49,18 @@ The pinned SHA is `AGENTFORGE_REF` in `.github/workflows/ci.yml`. The
 `agentforge` binary on PATH is a symlink into `~/Projects/agentforge/dist` and
 is **not** the pinned compiler — using it can produce output CI rejects.
 
-The Claude marketplace root is `marketplaces/claude`, not the repo root:
+The Claude marketplace root is `marketplaces/claude`, not the repo root. Adding
+the marketplace does not install the plugin — removing a marketplace uninstalls
+its plugins, and re-adding does not bring them back:
 
 ```
 /plugin marketplace add ~/Projects/ndr/marketplaces/claude
+/plugin install ndr@ndr
 ```
+
+## Gotcha: the CI deploy key is shared
+
+`AGENTFORGE_DEPLOY_KEY` in this repo's secrets is the **same** key registered on
+`jdh313/agentforge` for cc-marketplace's CI. Revoking that deploy key breaks the
+marketplace gate in both repos, not just this one. Rotate by adding a new key
+first, updating both repos' secrets, then removing the old one.
