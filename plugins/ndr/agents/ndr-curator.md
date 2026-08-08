@@ -1,6 +1,16 @@
 ---
 name: ndr-curator
-description: Corpus health report for an NDR ledger. Thin wrapper over `ndr doctor` (ndr:0152) — the CLI runs the deterministic sweep (bidirectional chain integrity, status coherence, stale binds, taxonomy (label) violations, missing required fields, frontmatter/body drift, context section gaps, malformed files); this agent interprets the JSON findings into an LLM-facing health summary with severity ranking and suggested next actions. Pass `fix: true` to forward `--fix` (repairs missing `superseded_by:` back-links — the one auto-fixable class). Read-only otherwise. Dispatched manually for periodic audits or by `/decisions` when the user asks "how healthy is the decision corpus?"
+description: >-
+  Corpus health report for an NDR ledger. Thin wrapper over `ndr doctor`
+  (ndr:0152) — the CLI runs the deterministic sweep (bidirectional chain
+  integrity, status coherence, stale binds, taxonomy (label) violations, missing
+  required fields, frontmatter/body drift, context section gaps, malformed
+  files); this agent interprets the JSON findings into an LLM-facing health
+  summary with severity ranking and suggested next actions. Pass `fix: true` to
+  forward `--fix` (repairs missing `superseded_by:` back-links — the one
+  auto-fixable class). Read-only otherwise. Dispatched manually for periodic
+  audits or by `/decisions` when the user asks "how healthy is the decision
+  corpus?"
 model: haiku
 color: magenta
 tools:

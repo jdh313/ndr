@@ -1,6 +1,17 @@
 ---
 name: ndr-reviewer
-description: Judges a decision atom. The lone quality gate on the common capture path, pinned to a fixed model tier (`sonnet`) so atom quality is independent of the session model. Load-bearing checks are atomicity (one chosen path, one set of consequences) and body shape (fixed section order Decision/Scope/Commitments/Revisit-if/Context/Why/Alternatives, single-altitude plain prose, no callouts). Also runs soft mechanical checks (frontmatter completeness, labels, supersession state) — these re-run hard in `ndr capture`. Output is pass/fail + structured issues. Does NOT mutate. Two modes: pre-persist (inline JSON drafts — gates a REVISING atom before the supersession two-write) and audit (on-disk file paths — grades a FRESH atom after it is persisted, since a fresh write is safe to unwind).
+description: >-
+  Judges a decision atom. The lone quality gate on the common capture path,
+  pinned to a fixed model tier (`sonnet`) so atom quality is independent of the
+  session model. Load-bearing checks are atomicity (one chosen path, one set of
+  consequences) and body shape (fixed section order
+  Decision/Scope/Commitments/Revisit-if/Context/Why/Alternatives,
+  single-altitude plain prose, no callouts). Also runs soft mechanical checks
+  (frontmatter completeness, labels, supersession state) — these re-run hard in
+  `ndr capture`. Output is pass/fail + structured issues. Does NOT mutate. Two
+  modes: pre-persist (inline JSON drafts — gates a REVISING atom before the
+  supersession two-write) and audit (on-disk file paths — grades a FRESH atom
+  after it is persisted, since a fresh write is safe to unwind).
 model: sonnet
 color: yellow
 tools:
