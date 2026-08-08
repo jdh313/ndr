@@ -1,0 +1,47 @@
+---
+id: "0051"
+title: Supersession with a slug is a three-write atomic primitive
+status: current
+decision_date: 2026-05-15
+author: Jacob Hoehler
+conviction: tentative
+project: Decision Pipeline
+labels:
+  - tooling
+  - supersession
+  - meta-chain
+binds: []
+supersedes: []
+superseded_by: []
+derived_from:
+  - ndr:0050
+informed_by:
+  - "0008"
+---
+
+# 0051 — Supersession with a slug is a three-write atomic primitive
+
+## Decision
+
+When the predecessor carries an `aliases:` slug, the supersede skill performs three coordinated writes: predecessor (`status: superseded`, `superseded_by: [successor]`, `aliases: []`), successor (`status: current`, `supersedes: [predecessor]`, `aliases: [moved slug]`), and the linkage between them. The alias handover is atomic with the supersession itself, not a separate user step.
+
+## Commitments
+
+- Supersede skill (not yet built) carries the three-write atomicity, including alias handover.
+- 0008's "supersession-needs-atomicity" assumption gains a sub-clause: atomicity now covers `aliases:` field handover when applicable.
+- A future revision: if another field needs handover, this becomes an N-write primitive; the contract stays "all field-handover is part of supersession."
+
+## Revisit if
+
+- Another field gets discovered to need handover during supersession (e.g. backlinks-as-frontmatter).
+- Uniqueness violations surface in practice, suggesting the slug-uniqueness check is missing or bypassable.
+
+## Context
+
+- 0008's two-write supersession primitive assumed no slug field.
+- Slugs introduce a third mutable point on the predecessor — `aliases:` is now the only frontmatter field that can move between atoms.
+- A crash mid-supersede with the handover deferred to a separate step leaves either a duplicate alias (two atoms claim the same slug) or a dangling alias (slug points at the superseded atom).
+
+## Why
+
+Folding handover into the supersede primitive means the invariant "exactly one atom holds a given slug at any time" is structurally protected, not discipline-dependent — matching the structural-protection pattern 0008 established for `supersedes:`. The supersede skill enforces the invariant; the substrate (plain YAML) doesn't have to.
