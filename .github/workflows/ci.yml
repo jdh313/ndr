@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, dev]
 
 jobs:
   ci:
@@ -34,3 +34,45 @@ jobs:
       # smoke: bun build --compile on the ubuntu runner (ndr:0128
       # bun-build-targets-stable assumption); artifact not uploaded
       - run: bun run build
+
+  # The plugin manifests under marketplaces/ are committed compiler output.
+  # This job recompiles them through a pinned AgentForge and fails on any
+  # difference, so a hand-edit or a stale sync cannot reach main.
+  marketplace:
+    runs-on: ubuntu-latest
+    env:
+      # Pinned deliberately. The `agentforge` on a dev machine's PATH is a
+      # symlink into ~/Projects/agentforge/dist and is NOT this compiler --
+      # compiling through it locally can produce output this job rejects.
+      AGENTFORGE_REF: 0ebebbb8f0cf23f9223792a4b625ca302c9d655d
+      AGENTFORGE_PROJECT: ${{ github.workspace }}/agentforge
+    steps:
+      - uses: actions/checkout@v4
+
+      # Fail closed. Without the key the agentforge checkout below would fail
+      # anyway, but silently enough to read as an infra flake rather than an
+      # ungated merge.
+      - name: Require the AgentForge deploy key
+        run: test -n "${{ secrets.AGENTFORGE_DEPLOY_KEY }}" || {
+          echo '::error::AGENTFORGE_DEPLOY_KEY is not set; the marketplace gate cannot run.'; exit 1; }
+
+      # NOTE: this deploy key is shared with cc-marketplace's CI. Revoking it
+      # on jdh313/agentforge breaks both repos' gates, not just this one.
+      - uses: actions/checkout@v4
+        with:
+          repository: jdh313/agentforge
+          ref: ${{ env.AGENTFORGE_REF }}
+          ssh-key: ${{ secrets.AGENTFORGE_DEPLOY_KEY }}
+          path: agentforge
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - run: bun install --frozen-lockfile
+        working-directory: agentforge
+
+      # Validates the exact committed bytes both runtimes load, rather than a
+      # fresh temporary compile.
+      - name: Check committed publications for drift
+        run: bun run "$AGENTFORGE_PROJECT/src/cli.ts" check MARKETPLACE.yaml --out marketplaces
