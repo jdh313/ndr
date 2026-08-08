@@ -1,0 +1,81 @@
+schema: agentforge.package/v1
+id: ndr
+defaults:
+  name: ndr
+  version: 1.0.0-beta
+  description: >-
+    Nested decision records — atomic markdown decision atoms with
+    supersession-aware reading, routed through the ndr CLI. Initialize a repo
+    with `ndr init`, capture engineering decisions from any chat
+    (/capture-decision), deeply interrogate a candidate decision before
+    capturing it (/interrogate-decision), query the corpus by topic with
+    automatic supersession resolution (/decisions <topic>), ground a coding
+    session in relevant prior decisions before edits (/ground), audit code
+    against current decision heads with /drift-check, and optionally bootstrap
+    Obsidian vault content (/ndr-bootstrap). Requires the ndr binary on PATH
+    (bun run install:bin).
+  author:
+    name: Jacob Hoehler
+  license: Apache-2.0
+  keywords:
+    - decisions
+    - adrs
+    - obsidian
+    - documentation
+    - engineering
+    - supersession
+    - architecture
+    - knowledge-management
+artifacts:
+  - {type: skill, pattern: 'skills/*/SKILL.md'}
+  - {type: agent, pattern: 'agents/*.md'}
+  - {type: hook, pattern: hooks/hooks.json}
+payloads:
+  include:
+    - {source: references/}
+    - {source: assets/}
+    - {source: hooks/check-cli-version.sh}
+targets:
+  claude: {}
+  codex:
+    losses:
+      - construct: agent-tools-filter
+        state: stripped
+        note: >-
+          All seven agents project as Codex role procedures without their
+          `tools:` allowlist. The read-only agents (ndr-reader, ndr-reviewer,
+          ndr-drift-auditor, ndr-migrator, ndr-curator, ndr-extractor) restate
+          that boundary in body prose, so they are undirected on Codex rather
+          than unsafe. The ledger-write fence does not depend on the filter at
+          all — every write goes through the `ndr` CLI, which holds on either
+          runtime.
+      - construct: mcp-tool-reference
+        state: retained-unenforced
+        note: >-
+          ndr-extractor names `mcp__obsidian-mcp__read_multiple_notes` for batch
+          vault loads. Codex has no Obsidian MCP server, but the same sentence
+          names `obsidian-cli` as the primary path, so a Codex reader keeps a
+          working route and loses only the batch optimization.
+      - construct: body-template-variable
+        state: retained-unenforced
+        note: >-
+          Five skills and references/workflow.md document their input as
+          `$ARGUMENTS`. Codex skills have no body templating, so the literal
+          text reaches the model unsubstituted; each site's surrounding prose
+          describes the argument in words, so a Codex user can supply it
+          directly.
+    native:
+      interface:
+        displayName: NDR
+        shortDescription: Capture and resolve engineering decisions
+        longDescription: >-
+          Atomic markdown decision records with supersession-aware retrieval.
+          Requires the `ndr` binary on PATH — every read and write goes through
+          the CLI, so the plugin is inert without it.
+        developerName: Jacob Hoehler
+        category: Developer Tools
+        capabilities: [Read, Write]
+        defaultPrompt:
+          - Capture the decisions from this conversation.
+          - What did we decide about this area?
+          - Ground me in the decisions that govern this code.
