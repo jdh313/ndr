@@ -1,6 +1,15 @@
 ---
 name: migrate-ledger
-description: One-time, retirable migration of an NDR ledger from the old atom format (Obsidian callouts, area/topic, aliases, wikilinks) to the new repo-native format (labels, conviction, author, binds, single-altitude body). Use when the user says "migrate the ledger", "run the ndr migration", "convert this ledger to the new format", or points at a repo whose `decisions/` are still old-format. Orchestrates the full two-pass sequence: mechanical `ndr migrate` (pass 1), Claude-driven body reshaping in batches (pass 2), a `ndr doctor` acceptance sweep, and one reviewable PR. Runs once per ledger, then this skill and the `ndr-migrator` agent are deleted from the plugin.
+description: >-
+  One-time, retirable migration of an NDR ledger from the old atom format
+  (Obsidian callouts, area/topic, aliases, wikilinks) to the new repo-native
+  format (labels, conviction, author, binds, single-altitude body). Use when the
+  user says "migrate the ledger", "run the ndr migration", "convert this ledger
+  to the new format", or points at a repo whose `decisions/` are still
+  old-format. Orchestrates the full two-pass sequence: mechanical `ndr migrate`
+  (pass 1), Claude-driven body reshaping in batches (pass 2), a `ndr doctor`
+  acceptance sweep, and one reviewable PR. Runs once per ledger, then this skill
+  and the `ndr-migrator` agent are deleted from the plugin.
 disable-model-invocation: true
 allowed-tools:
   - Bash

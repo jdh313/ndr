@@ -9,9 +9,9 @@
       "changelog-path": "CHANGELOG-beta.md",
       "extra-files": [
         {
-          "type": "json",
-          "path": "plugins/ndr/.claude-plugin/plugin.json",
-          "jsonpath": "$.version"
+          "type": "yaml",
+          "path": "plugins/ndr/PACKAGE.yaml",
+          "jsonpath": "$.defaults.version"
         }
       ]
     }
