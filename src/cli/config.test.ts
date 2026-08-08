@@ -30,10 +30,10 @@ describe("parseRepoConfig", () => {
   test("absolute ledger and project pass through", () => {
     const config = parseRepoConfig(
       path.join(tmp, CONFIG_BASENAME),
-      'ledger = "/somewhere/decisions"\nproject = "[[ndr]]"\n',
+      'ledger = "/somewhere/decisions"\nproject = "ndr"\n',
     );
     expect(config.ledger).toBe("/somewhere/decisions");
-    expect(config.project).toBe("[[ndr]]");
+    expect(config.project).toBe("ndr");
   });
 
   test("relative ledger resolves against the config file's directory", () => {
@@ -64,8 +64,17 @@ describe("parseRepoConfig", () => {
     ).toThrow(RepoConfigError);
   });
 
+  test("wikilink project throws RepoConfigError (pre-migration config, ndr:0139)", () => {
+    expect(() =>
+      parseRepoConfig(
+        path.join(tmp, CONFIG_BASENAME),
+        'ledger = "./decisions"\nproject = "[[ndr]]"\n',
+      ),
+    ).toThrow(RepoConfigError);
+  });
+
   test("missing ledger key throws RepoConfigError", () => {
-    expect(() => parseRepoConfig(path.join(tmp, CONFIG_BASENAME), 'project = "[[x]]"\n')).toThrow(
+    expect(() => parseRepoConfig(path.join(tmp, CONFIG_BASENAME), 'project = "x"\n')).toThrow(
       RepoConfigError,
     );
   });

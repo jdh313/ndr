@@ -5,7 +5,7 @@ status: current
 decision_date: '2026-06-01'
 author: "Jacob Hoehler"
 conviction: strong
-project: '[[ndr]]'
+project: "ndr"
 derived_from:
 - "[[JUN-170 — Scaffold repo: bun init, deps, lint/format]]"
 informed_by: []

@@ -5,7 +5,7 @@ status: current
 decision_date: 2026-05-15
 author: "Jacob Hoehler"
 conviction: tentative
-project: "[[Decision Pipeline]]"
+project: "Decision Pipeline"
 derived_from:
   - "[[Decisions/0050-slugs-as-aliases-minted-lazily]]"
 informed_by: []

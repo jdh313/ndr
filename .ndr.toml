@@ -1,2 +1,2 @@
 ledger = "./decisions"
-project = "[[ndr]]"
+project = "ndr"
