@@ -36,3 +36,6 @@ build/
 
 # Babysitter
 .a5c/
+
+# Agent scratch memory
+.claude/agent-memory/
