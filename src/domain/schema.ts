@@ -41,8 +41,7 @@ export const FrontmatterSchema = z
       .string()
       .min(1)
       .refine((v) => !/^\[\[.*\]\]$/.test(v), {
-        message:
-          "project must be a plain string, not a wikilink — write `ndr`, not `[[ndr]]`",
+        message: "project must be a plain string, not a wikilink — write `ndr`, not `[[ndr]]`",
       }),
 
     labels: z.array(z.string().min(1)).min(1).max(4),
