@@ -40,6 +40,37 @@ import { CHECK_CLASSES, asAtomId, diagnose } from "../domain/index.ts";
 // lockstep with ATOM_ID_PATTERN in domain/atom.ts.
 const ATOM_ID_REF = /^(?:\d{4}|[0-9a-z]{6})$/;
 
+// `ndr:` is the documented citation form for both live grains (ndr:r3ffp4), so
+// every command that takes a ref accepts it as well as the bare form. Stripping
+// happens before any grain dispatch, which keeps `ndr:#slug` and
+// `ndr:area/topic` on their tombstone branches instead of dropping through to a
+// label lookup that would misreport them as missing coverage (ndr:0144).
+// Exactly one prefix is stripped: a leftover `ndr:` (or nothing at all after
+// it) is a malformed ref, and saying so is the whole point — the branch this
+// replaces reported it as a missing label, so a caller read a typo as "the
+// ledger has no coverage".
+const NDR_REF_PREFIX = "ndr:";
+
+function stripNdrPrefix(ref: string): string {
+  return ref.startsWith(NDR_REF_PREFIX) ? ref.slice(NDR_REF_PREFIX.length) : ref;
+}
+
+function malformedRefError(command: string): ResolveResult {
+  return {
+    stdout: "",
+    stderr: `\`${NDR_REF_PREFIX}\` is not a reference on its own — ${command} takes an atom-id (${NDR_REF_PREFIX}0042) or a label (${NDR_REF_PREFIX}write-side)\n`,
+    exitCode: 1,
+  };
+}
+
+// Gated on the raw input having actually carried the prefix: a bare empty ref
+// never went through the strip, so it keeps whatever each command already said
+// about it rather than being told about a prefix it never used.
+function badPrefixedRef(rawRef: string, ref: string): boolean {
+  if (ref === rawRef) return false;
+  return ref === "" || ref.startsWith(NDR_REF_PREFIX);
+}
+
 const NDR_VERSION = pkg.version;
 
 export { NO_LEDGER_MESSAGE } from "./config.ts";
@@ -307,10 +338,12 @@ export async function run(argv: readonly string[]): Promise<number> {
 }
 
 export async function resolveCommand(
-  ref: string,
+  rawRef: string,
   ledgerPath: string,
   opts: ListOptions = {},
 ): Promise<ResolveResult> {
+  const ref = stripNdrPrefix(rawRef);
+  if (badPrefixedRef(rawRef, ref)) return malformedRefError("resolve");
   const adapter = new MarkdownLedgerAdapter(ledgerPath);
   const resolveOpts: ResolveOpts = {
     json: opts.json ?? false,
@@ -416,10 +449,12 @@ async function resolveLabel(
 // superseded one (the historical anchor behind an `ndr:0042` code reference).
 // Plain output is the raw file, byte-equivalent to reading it directly.
 export async function showCommand(
-  ref: string,
+  rawRef: string,
   ledgerPath: string,
   opts: { json?: boolean } = {},
 ): Promise<ResolveResult> {
+  const ref = stripNdrPrefix(rawRef);
+  if (badPrefixedRef(rawRef, ref)) return malformedRefError("show");
   if (!ATOM_ID_REF.test(ref)) {
     return {
       stdout: "",
@@ -478,10 +513,12 @@ export async function searchCommand(
 }
 
 export async function lineageCommand(
-  ref: string,
+  rawRef: string,
   ledgerPath: string,
   opts: ListOptions = {},
 ): Promise<ResolveResult> {
+  const ref = stripNdrPrefix(rawRef);
+  if (badPrefixedRef(rawRef, ref)) return malformedRefError("lineage");
   if (!ATOM_ID_REF.test(ref)) {
     return {
       stdout: "",

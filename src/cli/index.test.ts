@@ -219,6 +219,88 @@ describe("ndr resolve <label>", () => {
   });
 });
 
+// `ndr:` is the citation form the rules, the skills and the CLI's own error
+// text all prescribe (ndr:r3ffp4), so every ref-taking command accepts it.
+// Prefixed output must be byte-identical to the bare form, and the removed
+// grains must still reach their tombstones rather than a label lookup that
+// would misreport a typo'd ref as missing coverage.
+describe("ndr — the documented `ndr:` prefix on refs", () => {
+  test("resolve ndr:<atom-id> is identical to the bare atom-id", async () => {
+    const prefixed = await resolveCommand("ndr:0102", FIXTURES);
+    const bare = await resolveCommand("0102", FIXTURES);
+    expect(prefixed).toEqual(bare);
+    expect(prefixed.exitCode).toBe(0);
+  });
+
+  test("resolve ndr:<label> is identical to the bare label", async () => {
+    const prefixed = await resolveCommand("ndr:referencing", FIXTURES, { verbose: true });
+    const bare = await resolveCommand("referencing", FIXTURES, { verbose: true });
+    expect(prefixed).toEqual(bare);
+    expect(prefixed.exitCode).toBe(0);
+  });
+
+  test("show ndr:<atom-id> is identical to the bare atom-id", async () => {
+    expect(await showCommand("ndr:0070", FIXTURES)).toEqual(await showCommand("0070", FIXTURES));
+  });
+
+  test("lineage ndr:<atom-id> is identical to the bare atom-id", async () => {
+    expect(await lineageCommand("ndr:0070", FIXTURES)).toEqual(
+      await lineageCommand("0070", FIXTURES),
+    );
+  });
+
+  test("a prefixed removed grain still reaches its tombstone, not a label lookup", async () => {
+    const slug = await resolveCommand("ndr:#oxc-stack", FIXTURES);
+    expect(slug.exitCode).toBe(1);
+    expect(slug.stderr).toContain("slug references were removed");
+
+    const topic = await resolveCommand("ndr:tooling/framework", FIXTURES);
+    expect(topic.exitCode).toBe(1);
+    expect(topic.stderr).toContain("label");
+
+    // The defect this guards: neither may be reported as a missing label.
+    expect(slug.stderr).not.toContain("no current atoms with label");
+    expect(topic.stderr).not.toContain("no current atoms with label");
+  });
+
+  test("a bare `ndr:` is an explicit malformed ref, not an empty-label miss", async () => {
+    for (const [name, result] of [
+      ["resolve", await resolveCommand("ndr:", FIXTURES)],
+      ["show", await showCommand("ndr:", FIXTURES)],
+      ["lineage", await lineageCommand("ndr:", FIXTURES)],
+    ] as const) {
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain("is not a reference on its own");
+      expect(result.stderr).toContain(name);
+      expect(result.stderr).not.toContain("no current atoms with label");
+    }
+  });
+
+  // The guard is gated on the raw input having carried the prefix. A bare empty
+  // ref never went through the strip, so it must keep each command's
+  // pre-existing message rather than being told about a prefix it never used.
+  test("a bare empty ref keeps its pre-existing message, not the prefix one", async () => {
+    const resolve = await resolveCommand("", FIXTURES);
+    expect(resolve.exitCode).toBe(1);
+    expect(resolve.stderr).toContain("no current atoms with label");
+    expect(resolve.stderr).not.toContain("is not a reference on its own");
+
+    for (const result of [await showCommand("", FIXTURES), await lineageCommand("", FIXTURES)]) {
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("takes an atom-id");
+      expect(result.stderr).not.toContain("is not a reference on its own");
+    }
+  });
+
+  test("a doubled prefix is malformed, never a label miss", async () => {
+    const result = await resolveCommand("ndr:ndr:0102", FIXTURES);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("is not a reference on its own");
+    expect(result.stderr).not.toContain("no current atoms with label");
+  });
+});
+
 describe("ndr search <query>", () => {
   test("matching query returns compact lines", async () => {
     const result = await searchCommand("supersession", FIXTURES);
@@ -330,6 +412,15 @@ describe("ndr capture", () => {
     expect(round.exitCode).toBe(0);
     expect(round.stdout).toContain("Use FastAPI");
     expect(round.stdout).toContain(`Lineage: ${parsed.id}`);
+
+    // Same atom through the documented `ndr:` citation form. The fixtures
+    // ledger is all legacy 4-digit ids, so this is the only place the 6-char
+    // base32 grain gets prefix coverage.
+    expect(await resolveCommand(`ndr:${parsed.id}`, tmp)).toEqual(round);
+    expect(await showCommand(`ndr:${parsed.id}`, tmp)).toEqual(await showCommand(parsed.id, tmp));
+    expect(await lineageCommand(`ndr:${parsed.id}`, tmp)).toEqual(
+      await lineageCommand(parsed.id, tmp),
+    );
   });
 
   test("malformed JSON exits 1 with a bad_json error", async () => {
