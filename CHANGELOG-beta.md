@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.0.0-beta.1](https://github.com/jdh313/ndr/compare/ndr-v1.0.0-beta...ndr-v1.0.0-beta.1) (2026-08-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **plugin:** the Claude marketplace root moves from the repo root to marketplaces/claude. Re-add with:   /plugin marketplace remove ndr   /plugin marketplace add ~/Projects/ndr/marketplaces/claude
+
+### Features
+
+* **config:** require the project key in .ndr.toml ([00fc623](https://github.com/jdh313/ndr/commit/00fc6233f23faff6b4a6aa95ea3c3d962c0da0e0))
+* **plugin:** generate manifests from AgentForge canonical definitions ([07fbb6a](https://github.com/jdh313/ndr/commit/07fbb6a0daeb9d241938cae3bb8ef113b4d1cae1))
+
+
+### Bug Fixes
+
+* **cli:** accept the documented `ndr:` prefix on resolve, show, and lineage ([49feb78](https://github.com/jdh313/ndr/commit/49feb785b81007df88211e8ba2156d9da9e46ce7))
+* **plugin:** quote frontmatter descriptions containing ": " ([60e4cab](https://github.com/jdh313/ndr/commit/60e4cabc386116c0bc486b520bb2e002fb713a2f))
+* **schema:** reject wikilink project values at capture and in config ([a861153](https://github.com/jdh313/ndr/commit/a8611535190afbd516f9b29f1ed23e14ab979ea3))
+
 ## [1.0.0-beta](https://github.com/jdh313/ndr/compare/ndr-v0.1.0...ndr-v1.0.0-beta) (2026-07-10)
 
 
