@@ -2,9 +2,22 @@
 
 ## VCS
 
-This repo uses **git**, not jj. It was previously jj-colocated; `.jj` was
-removed on 2026-07-04. Use `git` commands directly (`git status`, `git log`,
-`git commit`, etc.) — this overrides the global default of jj.
+This repo uses **jj**, colocated with git. Use `jj` commands (`jj st`, `jj log`,
+`jj describe`, `jj new`, `jj bookmark set`, `jj git push`), matching the global
+default. A hook rejects `git` commands here and points at the `jj` equivalent.
+
+`.jj` was removed on 2026-07-04 and later restored; this file claimed
+git-only until 2026-08-09, so treat any older instruction to use `git`
+in this repo as stale.
+
+Two jj-specific gotchas:
+
+- `jj describe` writes a message onto the **current** working-copy change; it
+  does not advance it. Follow with `jj new` or the next edits land in the same
+  change.
+- Commits are SSH-signed via the 1Password agent. A locked agent fails with
+  `Signing error … 1Password: failed to fill whole buffer` — unlock 1Password
+  and re-run; nothing is lost.
 
 Branch workflow is documented as a tracked project rule in
 `.claude/rules/branch-workflow.md`.
