@@ -10,7 +10,7 @@ plugin_json="${CLAUDE_PLUGIN_ROOT:-}/.claude-plugin/plugin.json"
 required=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$plugin_json" | head -1)
 [ -n "$required" ] || exit 0
 
-install_cmd="bun install -g git+ssh://git@github.com/jdh313/ndr.git (or download a release binary)"
+install_cmd="bun install -g https://github.com/jdh313/ndr.git (or download a release binary)"
 
 if ! command -v ndr >/dev/null 2>&1; then
   printf '{"systemMessage":"ndr plugin: the ndr CLI is not on PATH — its skills will fail. Install: %s"}\n' "$install_cmd"
