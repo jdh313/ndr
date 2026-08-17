@@ -971,7 +971,7 @@ rm -rf "$SMOKE"; mkdir -p "$SMOKE/decisions/.taxonomy"
 cp plugins/ndr/assets/decisions/*.md "$SMOKE/decisions/"
 cp plugins/ndr/assets/taxonomy/labels.yaml "$SMOKE/decisions/.taxonomy/labels.yaml"
 printf 'ledger = "./decisions"\nproject = "ndr"\n' > "$SMOKE/.ndr.toml"
-(cd "$SMOKE" && /Users/jacob/Projects/ndr/dist/ndr doctor --json)
+(cd "$SMOKE" && ~/Projects/ndr/dist/ndr doctor --json)
 ```
 
 Expected: exit 0; no `malformed`, `missing_fields`, `missing_context`, or `taxonomy` findings. `binds_stale` may fire (seed atoms have empty `binds:`, so none) — empty binds produce no finding. Chain-integrity for `0005`<->`0007` supersession should be intact.
@@ -1088,15 +1088,15 @@ If any test asserts on `NDR_RULE` content containing "hybrid-altitude", update t
 
 - [ ] **Step 3: Regenerate `.claude/rules/ndr.md` from the template**
 
-Rewrite `/Users/jacob/Projects/ndr/.claude/rules/ndr.md` to match the `NDR_RULE` constant body (everything between the backtick-delimited template, with `\`` unescaped to `` ` ``). Concretely, the file must become — frontmatter description line, `# NDR coverage` heading, the plain-`project:` intro (not `project: [[<this-repo>]]`), the two-grain "Pointing at decisions from code" block, and the closing "new-format body" phrasing. The current file's old markers to replace: `project: [[<this-repo>]]` intro (~line 9), the "Three resolvable grains" block with `ndr:#auth-substrate` and `ndr:auth/substrate` (~lines 30-45), and "hybrid-altitude body" (~line 78-equivalent).
+Rewrite `~/Projects/ndr/.claude/rules/ndr.md` to match the `NDR_RULE` constant body (everything between the backtick-delimited template, with `\`` unescaped to `` ` ``). Concretely, the file must become — frontmatter description line, `# NDR coverage` heading, the plain-`project:` intro (not `project: [[<this-repo>]]`), the two-grain "Pointing at decisions from code" block, and the closing "new-format body" phrasing. The current file's old markers to replace: `project: [[<this-repo>]]` intro (~line 9), the "Three resolvable grains" block with `ndr:#auth-substrate` and `ndr:auth/substrate` (~lines 30-45), and "hybrid-altitude body" (~line 78-equivalent).
 
 The fastest correct method: build the binary and let `ndr init` write it into a scratch dir, then copy:
 
 ```bash
 bun run build
 SMOKE=/tmp/ndr-rule-smoke; rm -rf "$SMOKE"; mkdir -p "$SMOKE"
-(cd "$SMOKE" && /Users/jacob/Projects/ndr/dist/ndr init --project ndr >/dev/null 2>&1 || true)
-cp "$SMOKE/.claude/rules/ndr.md" /Users/jacob/Projects/ndr/.claude/rules/ndr.md
+(cd "$SMOKE" && ~/Projects/ndr/dist/ndr init --project ndr >/dev/null 2>&1 || true)
+cp "$SMOKE/.claude/rules/ndr.md" ~/Projects/ndr/.claude/rules/ndr.md
 ```
 
 Then read the copied file and confirm it carries the two-grain block and no `[[<this-repo>]]` / `#slug` / `area/topic` / `hybrid-altitude`. (If `ndr init` refuses because `$SMOKE` isn't a git repo or already has config, generate the file by hand-transcribing the `NDR_RULE` constant body instead.)
