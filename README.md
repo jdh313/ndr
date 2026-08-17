@@ -21,7 +21,7 @@ to this repo:
 
 ```sh
 # From source via Bun (requires Bun; runs the CLI straight from src/)
-bun install -g git+ssh://git@github.com/jdh313/ndr.git
+bun install -g https://github.com/jdh313/ndr.git
 
 # Updating = re-run the same command (installs track main, which always
 # matches the latest release)
