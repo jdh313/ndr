@@ -7,6 +7,8 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -38,8 +40,17 @@ jobs:
   # The plugin manifests under marketplaces/ are committed compiler output.
   # This job recompiles them through a pinned AgentForge and fails on any
   # difference, so a hand-edit or a stale sync cannot reach main.
+  #
+  # Skipped on fork PRs: the compiler lives in the private jdh313/agentforge,
+  # and GitHub withholds secrets from fork runs, so the deploy-key gate below
+  # would fail for reasons a contributor cannot fix. Drift on a fork PR is a
+  # manual review item until agentforge is public, at which point delete this
+  # `if:` and let the gate run for everyone.
   marketplace:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       # Pinned deliberately. The `agentforge` on a dev machine's PATH is a
       # symlink into ~/Projects/agentforge/dist and is NOT this compiler --
