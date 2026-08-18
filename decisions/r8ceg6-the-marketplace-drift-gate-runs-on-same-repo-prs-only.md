@@ -1,7 +1,7 @@
 ---
 id: "r8ceg6"
 title: The marketplace drift gate runs on same-repo PRs only
-status: current
+status: superseded
 decision_date: 2026-08-17
 author: Jacob Hoehler
 conviction: tentative
@@ -12,7 +12,8 @@ labels:
 binds:
   - .github/workflows/ci.yml
 supersedes: []
-superseded_by: []
+superseded_by:
+  - 4b95td
 derived_from: []
 informed_by:
   - 0yb8xb
