@@ -15,26 +15,26 @@
 
 ### Features
 
-* capture auto-fills author from git and prints advisories ([5dedbc1](https://github.com/jdh313/ndr/commit/5dedbc137942b4d4d8eefc12e7d9d4e5c884e11f))
-* **capture:** accept a markdown draft file, not only JSON ([c60dd19](https://github.com/jdh313/ndr/commit/c60dd190b81f32843a267840de939e473b6ba879))
-* doctor checks labels, stale binds, and context sections; alias checks removed ([5d62cf0](https://github.com/jdh313/ndr/commit/5d62cf0b15d87c4963584c3e0cb12e2eca1879b2))
-* doctor gathers repo files for binds checks via git ls-files ([24fa035](https://github.com/jdh313/ndr/commit/24fa035a25c3cf0a3c0899344824770a23de7cd6))
-* init seeds labels.yaml and plain project names; rule prose on two grains ([11dc4a8](https://github.com/jdh313/ndr/commit/11dc4a84a53c0b72fbcf1860fa6aceb8bf12933e))
-* **migrate:** carry dropped fields into body + add --apply-bodies ([059fd03](https://github.com/jdh313/ndr/commit/059fd03687bb03d62dc190bff3a50ad00aefd1f3))
-* ndr migrate — mechanical pass-1 format migration ([36d2b1c](https://github.com/jdh313/ndr/commit/36d2b1c597640e276b9f5d36921d79002575f3de))
-* new-format capture with plain-id supersession and advisories ([7e471b8](https://github.com/jdh313/ndr/commit/7e471b8adfda699294c5477c077871a98aff8d3e))
-* new-format frontmatter schema (author, conviction, labels, binds) ([3db5b3f](https://github.com/jdh313/ndr/commit/3db5b3f6bf3934e5bc107f908bb3594089a0b792))
-* **plugin:** add a session-start hook that flags an outdated ndr CLI ([09b2a5c](https://github.com/jdh313/ndr/commit/09b2a5cf72d73550488f9d5ec6e70cf63896e5d8))
-* retirable migrate-ledger skill and ndr-migrator agent for pass-2 reshaping ([6b295d9](https://github.com/jdh313/ndr/commit/6b295d9f5810464325ddfd528b087d62687436a6))
-* single labels.yaml taxonomy axis replaces areas/topics ([7ce2ac3](https://github.com/jdh313/ndr/commit/7ce2ac38451b99993f93fe302f1c501ba662a078))
-* two-grain resolve, label-aware briefs and current, ndr labels command ([51afab5](https://github.com/jdh313/ndr/commit/51afab56ddc666c392521614af0bb7ca61ce09b6))
+* capture auto-fills author from git and prints advisories ([b7f19c2](https://github.com/jdh313/ndr/commit/b7f19c26ebd3651dd324f9f3cd9832312c147943))
+* **capture:** accept a markdown draft file, not only JSON ([6789ec5](https://github.com/jdh313/ndr/commit/6789ec5baa8818aceeec7234cec871761097990d))
+* doctor checks labels, stale binds, and context sections; alias checks removed ([b8aa672](https://github.com/jdh313/ndr/commit/b8aa672f1fc3e810268d8129d27c5488ba8ce600))
+* doctor gathers repo files for binds checks via git ls-files ([71996ae](https://github.com/jdh313/ndr/commit/71996ae1b16243f4cede28b99e00a5b01a1813ac))
+* init seeds labels.yaml and plain project names; rule prose on two grains ([657c61a](https://github.com/jdh313/ndr/commit/657c61a365ab982cc5473a9f4aaa53d834388bb4))
+* **migrate:** carry dropped fields into body + add --apply-bodies ([c6556ba](https://github.com/jdh313/ndr/commit/c6556baf047c27d169745f3bc961b7edb18ed79e))
+* ndr migrate — mechanical pass-1 format migration ([e68ed89](https://github.com/jdh313/ndr/commit/e68ed89deae72a0ec6a434deb0604685d1baccad))
+* new-format capture with plain-id supersession and advisories ([78fb044](https://github.com/jdh313/ndr/commit/78fb0445429899a18c9419480f24c5ac755b665f))
+* new-format frontmatter schema (author, conviction, labels, binds) ([8ae619e](https://github.com/jdh313/ndr/commit/8ae619e97f1bbdadc7c88891bf2cffb791740886))
+* **plugin:** add a session-start hook that flags an outdated ndr CLI ([731a953](https://github.com/jdh313/ndr/commit/731a95333478562c3703e110007d245d6851db07))
+* retirable migrate-ledger skill and ndr-migrator agent for pass-2 reshaping ([7f0d258](https://github.com/jdh313/ndr/commit/7f0d2583caa746ca62c86ba3581b3da5a33f687b))
+* single labels.yaml taxonomy axis replaces areas/topics ([d0fbd66](https://github.com/jdh313/ndr/commit/d0fbd6643764e63fb128ff4bbb567699df8784aa))
+* two-grain resolve, label-aware briefs and current, ndr labels command ([ce3c842](https://github.com/jdh313/ndr/commit/ce3c842dbc0069f1c49bc69ee7242cb63665a605))
 
 
 ### Bug Fixes
 
-* ndr migrate reports label truncation and covers error paths ([b0167af](https://github.com/jdh313/ndr/commit/b0167aff53eddd0bf494585090ce18cdcba687ce))
+* ndr migrate reports label truncation and covers error paths ([28ac2bd](https://github.com/jdh313/ndr/commit/28ac2bdc831f290fb8963d0ef0d136ef5991e0b0))
 
 
 ### Code Refactoring
 
-* two-grain reference type, extractAtomIdFromRef accepts plain ids ([d46e938](https://github.com/jdh313/ndr/commit/d46e938df3831b36c6dc1febea743227fc7002ec))
+* two-grain reference type, extractAtomIdFromRef accepts plain ids ([dce66f6](https://github.com/jdh313/ndr/commit/dce66f6105306d2a32276cc45c414eeb46e54d0d))
