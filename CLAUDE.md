@@ -2,22 +2,20 @@
 
 ## VCS
 
-This repo uses **jj**, colocated with git. Use `jj` commands (`jj st`, `jj log`,
-`jj describe`, `jj new`, `jj bookmark set`, `jj git push`), matching the global
-default. A hook rejects `git` commands here and points at the `jj` equivalent.
-
-`.jj` was removed on 2026-07-04 and later restored; this file claimed
-git-only until 2026-08-09, so treat any older instruction to use `git`
-in this repo as stale.
+The maintainer works in **jj**, colocated with git, so agent instructions
+here use `jj` commands (`jj st`, `jj log`, `jj describe`, `jj new`,
+`jj bookmark set`, `jj git push`). Plain `git` works fine on a fresh clone —
+nothing in the repo blocks it; the maintainer's own local tooling rejects
+`git` and points at the `jj` equivalent, but that lives outside this repo.
 
 Two jj-specific gotchas:
 
 - `jj describe` writes a message onto the **current** working-copy change; it
   does not advance it. Follow with `jj new` or the next edits land in the same
   change.
-- Commits are SSH-signed via the 1Password agent. A locked agent fails with
-  `Signing error … 1Password: failed to fill whole buffer` — unlock 1Password
-  and re-run; nothing is lost.
+- If commits are SSH-signed through an agent (the maintainer uses 1Password),
+  a locked agent fails with `Signing error … failed to fill whole buffer` —
+  unlock the agent and re-run; nothing is lost.
 
 Branch workflow is documented as a tracked project rule in
 `.claude/rules/branch-workflow.md`.
@@ -54,19 +52,23 @@ generated manifests, keeping the CLI and plugin versions in lockstep
 Recompile after any change under `plugins/`:
 
 ```sh
-git -C ~/Projects/agentforge worktree add --detach /tmp/af-pin <pinned-sha>
-bun run /tmp/af-pin/src/cli.ts compile MARKETPLACE.yaml --out marketplaces
+# one-time: check out the pinned compiler (the SHA is AGENTFORGE_REF in
+# .github/workflows/ci.yml; jdh313/agentforge is public)
+git clone https://github.com/jdh313/agentforge "$TMPDIR/af-pin"
+git -C "$TMPDIR/af-pin" checkout <AGENTFORGE_REF>
+bun install --cwd "$TMPDIR/af-pin" --frozen-lockfile
+
+bun run "$TMPDIR/af-pin/src/cli.ts" compile MARKETPLACE.yaml --out marketplaces
 ```
 
-The pinned SHA is `AGENTFORGE_REF` in `.github/workflows/ci.yml`. The
-`agentforge` binary on PATH is a symlink into `~/Projects/agentforge/dist` and
-is **not** the pinned compiler — using it can produce output CI rejects.
+Any `agentforge` already on your PATH (a dev build, a different tag) is
+**not** the pinned compiler — using it can produce output CI rejects.
 
 The Claude marketplace root is `marketplaces/claude`, not the repo root. Adding
 the marketplace does not install the plugin — removing a marketplace uninstalls
 its plugins, and re-adding does not bring them back:
 
 ```
-/plugin marketplace add ~/Projects/ndr/marketplaces/claude
+/plugin marketplace add /path/to/your/ndr-checkout/marketplaces/claude
 /plugin install ndr@ndr
 ```

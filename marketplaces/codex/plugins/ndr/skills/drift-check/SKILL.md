@@ -21,7 +21,7 @@ This skill encodes the **code-vs-decision coherence check** for ndr — compleme
 
 ## Tool usage
 
-All NDR ledger access goes through the `ndr` CLI (ndr:0129) — and it happens inside `ndr-drift-auditor`, not in this skill. The agent enumerates current heads with `ndr current --verbose` and pulls full bodies with `ndr resolve <atom-id> --full` (never by reading ledger files); the CLI owns the supersession walk. `obsidian-cli` and MCP vault tools are not used for NDR atoms — they are scoped to non-NDR vault operations (ndr:0100). This skill uses `Bash` for diff resolution and ledger resolution, and `Task` for agent dispatch. Atom writes go through `ndr capture` (via `/capture-decision`) — never create atom files directly. If `ndr` is not on PATH, hard-error with the install hint (`bun run install:bin` in `~/Projects/ndr`); there is no fallback path.
+All NDR ledger access goes through the `ndr` CLI (ndr:0129) — and it happens inside `ndr-drift-auditor`, not in this skill. The agent enumerates current heads with `ndr current --verbose` and pulls full bodies with `ndr resolve <atom-id> --full` (never by reading ledger files); the CLI owns the supersession walk. `obsidian-cli` and MCP vault tools are not used for NDR atoms — they are scoped to non-NDR vault operations (ndr:0100). This skill uses `Bash` for diff resolution and ledger resolution, and `Task` for agent dispatch. Atom writes go through `ndr capture` (via `/capture-decision`) — never create atom files directly. If `ndr` is not on PATH, hard-error with the install hint (`bun install -g https://github.com/jdh313/ndr.git`, or a release binary); there is no fallback path.
 
 ## Hard rules
 

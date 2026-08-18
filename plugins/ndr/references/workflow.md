@@ -4,7 +4,7 @@ How `/capture-decision`, `/decisions`, `/ground`, and the audit surfaces (`/drif
 
 ## The `ndr` CLI
 
-The shared substrate for both flows. Installed via `bun run install:bin` in `~/Projects/ndr` (ndr:0147); skills hard-error with that hint when the binary is missing — there is no fallback path.
+The shared substrate for both flows. Installed via `bun install -g https://github.com/jdh313/ndr.git` or a release binary (ndr:0q443w); maintainers use `bun run install:bin` from a checkout (ndr:0147); skills hard-error with that hint when the binary is missing — there is no fallback path.
 
 | Verb | Job |
 | --- | --- |
@@ -100,7 +100,7 @@ Everything else is the skill (orchestration + in-context judgment) or the CLI
 
 - **Skill = scope detection + user interaction + in-conversation composition.** The skill owns "what is this conversation about?" and writes the atom, because the context is already loaded; sending it to a subagent costs tokens and adds latency for no isolation benefit.
 - **Reviewer = independence, pinned tier.** The one agent on the common path. Its value is grading the author can't do for itself; pinning it to `sonnet` makes atom quality independent of the session model (a Haiku session still gets a Sonnet-graded atom). The drafter is an agent only on the long-source path, where isolating a big source is the payoff.
-- **`ndr capture` = determinism.** Id assignment, taxonomy enforcement, and the supersession transaction must not depend on LLM judgment. The CLI is the only path that **mints ids and runs the two-write** — typed, tested (`bun test` in `~/Projects/ndr`), and easy to reason about under failure. (Post-capture prose fixes to a persisted fresh atom may edit the file directly, as any manual edit could — that is not the determinism-critical surface.)
+- **`ndr capture` = determinism.** Id assignment, taxonomy enforcement, and the supersession transaction must not depend on LLM judgment. The CLI is the only path that **mints ids and runs the two-write** — typed, tested (`bun test` in the ndr repo), and easy to reason about under failure. (Post-capture prose fixes to a persisted fresh atom may edit the file directly, as any manual edit could — that is not the determinism-critical surface.)
 
 ## Read flow
 
@@ -159,7 +159,7 @@ The two skills share the CLI and the reader but differ in who supplies the scope
 
 ### Why skill + agent split (not just an agent)
 
-Subagents don't see the skills list. The orchestrator does — its always-visible reminder block carries each skill's frontmatter description. That's the primary "Claude knows when to invoke this" mechanism. An agent alone, with no skill, would have a much weaker activation path: agent descriptions are only visible to agents that have Agent-tool access *and* are actively scanning. The skill provides the trigger surface; the agent provides the isolated context for fuzzy-scope work. This is the same shape `librarian:meeting-followup` + `librarian:vault-reader` use.
+Subagents don't see the skills list. The orchestrator does — its always-visible reminder block carries each skill's frontmatter description. That's the primary "Claude knows when to invoke this" mechanism. An agent alone, with no skill, would have a much weaker activation path: agent descriptions are only visible to agents that have Agent-tool access *and* are actively scanning. The skill provides the trigger surface; the agent provides the isolated context for fuzzy-scope work. This is the same skill-plus-agent shape other plugins use for fuzzy-scope work.
 
 ## Audit flow
 

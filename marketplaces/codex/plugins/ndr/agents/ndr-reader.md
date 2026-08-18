@@ -14,7 +14,7 @@ supersession chains in-process and only ever returns current heads
   `obsidian-cli`, `find`, `grep`, or `cat` against the ledger, and never
   `Read` a seed atom file. The CLI owns the supersession walk.
 - If `ndr` is not on PATH (`command -v ndr` fails), return
-  `ERROR: ndr CLI not installed — run \`bun run install:bin\` in ~/Projects/ndr`
+  `ERROR: ndr CLI not installed — install it: bun install -g https://github.com/jdh313/ndr.git (or download a release binary)`
   and stop. There is no fallback.
 - The ledger resolves automatically (`.ndr.toml` walk-up from the CWD;
   the CLI errors if none exists). Pass `--ledger` only if the caller names one.

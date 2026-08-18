@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-// Per-repo ledger config (JUN-175). A repo opts in by placing `.ndr.toml` at
+// Per-repo ledger config. A repo opts in by placing `.ndr.toml` at
 // or above the CWD — `ndr init` scaffolds it. There is no built-in default
 // ledger; a personal default is just a `.ndr.toml` higher up the walk (e.g.
 // at `~`). Corpus root is a runtime config/CWD concern, not a schema concept
