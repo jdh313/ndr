@@ -41,13 +41,9 @@ jobs:
   # This job recompiles them through a pinned AgentForge and fails on any
   # difference, so a hand-edit or a stale sync cannot reach main.
   #
-  # Skipped on fork PRs: the compiler lives in the private jdh313/agentforge,
-  # and GitHub withholds secrets from fork runs, so the deploy-key gate below
-  # would fail for reasons a contributor cannot fix. Drift on a fork PR is a
-  # manual review item until agentforge is public, at which point delete this
-  # `if:` and let the gate run for everyone.
+  # Runs on fork PRs too: jdh313/agentforge is public, so the checkout below
+  # needs no secret and nothing here is withheld from a fork run.
   marketplace:
-    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -60,20 +56,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Fail closed. Without the key the agentforge checkout below would fail
-      # anyway, but silently enough to read as an infra flake rather than an
-      # ungated merge.
-      - name: Require the AgentForge deploy key
-        run: test -n "${{ secrets.AGENTFORGE_DEPLOY_KEY }}" || {
-          echo '::error::AGENTFORGE_DEPLOY_KEY is not set; the marketplace gate cannot run.'; exit 1; }
-
-      # NOTE: this deploy key is shared with cc-marketplace's CI. Revoking it
-      # on jdh313/agentforge breaks both repos' gates, not just this one.
       - uses: actions/checkout@v4
         with:
           repository: jdh313/agentforge
           ref: ${{ env.AGENTFORGE_REF }}
-          ssh-key: ${{ secrets.AGENTFORGE_DEPLOY_KEY }}
           path: agentforge
 
       - uses: oven-sh/setup-bun@v2

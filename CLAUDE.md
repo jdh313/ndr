@@ -70,10 +70,3 @@ its plugins, and re-adding does not bring them back:
 /plugin marketplace add ~/Projects/ndr/marketplaces/claude
 /plugin install ndr@ndr
 ```
-
-## Gotcha: the CI deploy key is shared
-
-`AGENTFORGE_DEPLOY_KEY` in this repo's secrets is the **same** key registered on
-`jdh313/agentforge` for cc-marketplace's CI. Revoking that deploy key breaks the
-marketplace gate in both repos, not just this one. Rotate by adding a new key
-first, updating both repos' secrets, then removing the old one.
