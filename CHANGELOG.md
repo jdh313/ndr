@@ -5,11 +5,11 @@
 
 ### Features
 
-* automate ndr releases via release-please and a native build matrix ([ac9e01b](https://github.com/jdh313/ndr/commit/ac9e01b9accc5d76345a4b27639615e6700e4ca1))
-* creates new skill for interrogating ndr decisions ([3abeaa9](https://github.com/jdh313/ndr/commit/3abeaa9461de88c7f839b485997d9eb1e45cf09f))
+* automate ndr releases via release-please and a native build matrix ([d6d6329](https://github.com/jdh313/ndr/commit/d6d6329c66c7a168f045838701e035baa2992f76))
+* creates new skill for interrogating ndr decisions ([c899099](https://github.com/jdh313/ndr/commit/c899099061833297dbe63592e47ac47c1f256727))
 
 
 ### Bug Fixes
 
-* pin the first ndr release to 0.1.0 via config-file mode ([64e2772](https://github.com/jdh313/ndr/commit/64e277282c9f2a54fbdd41b22f57cb537fc1e59f))
-* stop ndr-drafter emitting a bogus id and title-inline H1 ([f02ba53](https://github.com/jdh313/ndr/commit/f02ba532b306041f5457401f7776ca18b3f881de))
+* pin the first ndr release to 0.1.0 via config-file mode ([e840842](https://github.com/jdh313/ndr/commit/e84084220daac7236dabdcb220b4e0780c50fd6a))
+* stop ndr-drafter emitting a bogus id and title-inline H1 ([816d783](https://github.com/jdh313/ndr/commit/816d783fe133b8bdb4bbc08dc806139e5e227662))
