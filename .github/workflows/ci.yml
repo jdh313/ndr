@@ -51,7 +51,7 @@ jobs:
       # Pinned deliberately. The `agentforge` on a dev machine's PATH is a
       # symlink into ~/Projects/agentforge/dist and is NOT this compiler --
       # compiling through it locally can produce output this job rejects.
-      AGENTFORGE_REF: 0ebebbb8f0cf23f9223792a4b625ca302c9d655d
+      AGENTFORGE_REF: 1dba647fe872ef6422132cee82e03fb386f82eb8
       AGENTFORGE_PROJECT: ${{ github.workspace }}/agentforge
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
