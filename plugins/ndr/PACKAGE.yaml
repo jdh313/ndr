@@ -2,7 +2,7 @@ schema: agentforge.package/v1
 id: ndr
 defaults:
   name: ndr
-  version: 1.0.0
+  version: 1.0.1-beta
   description: >-
     Nested decision records — atomic markdown decision atoms with
     supersession-aware reading, routed through the ndr CLI. Initialize a repo
