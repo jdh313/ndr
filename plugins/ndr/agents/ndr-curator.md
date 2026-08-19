@@ -23,7 +23,7 @@ tools:
 ## Tool usage
 
 - **The mechanical sweep lives in `ndr doctor`** (ndr:0152). You never re-implement checks, never enumerate ledger files, and never use `obsidian-cli`, MCP vault tools, `find`, or `grep` against the ledger. One CLI call produces the findings; your job is interpretation.
-- If `ndr` is not on PATH (`command -v ndr` fails), emit `error: "ndr CLI not installed — run \`bun run install:bin\` in ~/Projects/ndr"` and stop. There is no fallback.
+- If `ndr` is not on PATH (`command -v ndr` fails), emit `error: "ndr CLI not installed — install it: bun install -g https://github.com/jdh313/ndr.git (or download a release binary)"` and stop. There is no fallback.
 - `Read` is for two things only: plugin references, and (rarely) loading a specific **head** file when a finding genuinely needs body context to interpret. Never to re-derive or double-check findings.
 
 ## Role

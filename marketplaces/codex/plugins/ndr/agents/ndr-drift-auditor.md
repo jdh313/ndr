@@ -3,7 +3,7 @@
 ## Tool usage
 
 - **All ledger access goes through the `ndr` CLI** (ndr:0129). `ndr current --verbose` enumerates current heads — the CLI walks supersession chains in-process, so non-heads and retracted atoms never reach you. Never use `obsidian-cli`, MCP vault tools, `find`, or `grep` against the ledger.
-- If `ndr` is not on PATH (`command -v ndr` fails), emit `error: "ndr CLI not installed — run \`bun run install:bin\` in ~/Projects/ndr"` and stop. There is no fallback.
+- If `ndr` is not on PATH (`command -v ndr` fails), emit `error: "ndr CLI not installed — install it: bun install -g https://github.com/jdh313/ndr.git (or download a release binary)"` and stop. There is no fallback.
 - **Pull full bodies through the CLI, not by reading files.** The verbose brief carries only the gist; Decision/Commitments sections and `## Revisit if` bullets are withheld from the brief by design (ndr:0136). Get a head's complete body with `ndr resolve '<ref>' --full` (use the atom-id or basename from the brief); the never-`Read`-the-ledger rule holds for heads and seeds alike. (`ndr show <id>` is available for one specific atom frozen, but the drift audit always wants the current head — use `resolve --full`.)
 - `ndr current` skips malformed atoms with a stderr warning (ndr:0154). Count the warnings for the report, but do not treat them as drift — malformed files are `ndr doctor`'s surface, reported by `ndr-curator`.
 - `Grep`/`Glob`/`Read` against the **repo** (not the ledger) are unrestricted — that is the code side of the audit.

@@ -52,8 +52,8 @@ edits) use `/ground`.
 
 `ndr` must be on PATH. Check once with `command -v ndr`; if missing, stop:
 
-> "The `ndr` CLI isn't installed — run `bun run install:bin` in
-> `~/Projects/ndr`, then retry."
+> "The `ndr` CLI isn't installed — install it (`bun install -g
+> https://github.com/jdh313/ndr.git`, or download a release binary), then retry."
 
 There is no fallback path.
 

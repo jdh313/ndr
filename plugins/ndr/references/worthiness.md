@@ -48,45 +48,45 @@ A project-wide convention often deserves all three layers, each carrying what th
 | **Code-site comment** | What-not-to-do at the call site (load-bearing local guardrail) |
 | **CLAUDE.md / rules** | Enforcement, gotchas, "do this not that" — pointed back at the NDR via `ndr:` reference |
 
-No duplication: CLAUDE.md says "use stacked files (see `ndr:0057`)" rather than re-stating the rationale. The NDR is the canonical WHY; the rule file is the canonical enforcement; the code comment is the canonical local nudge.
+No duplication: CLAUDE.md says "use stacked files (see `ndr:<id>`)" rather than re-stating the rationale. The NDR is the canonical WHY; the rule file is the canonical enforcement; the code comment is the canonical local nudge.
 
 ## Calibration — worked examples
 
-Walking the rubric against real personal atoms.
+Walking the rubric against representative atoms. The examples are illustrative — shaped like real captures, but not tied to any particular ledger, so a reader without the original corpus can still follow the reasoning.
 
-### Clean pass — `ndr:0061` (Proactive vault context at session start)
+### Clean pass — "Pull vault context via a rule, not a session-start hook"
 
-- **Named alternative?** Yes — SessionStart hook was the rejected path. The rationale spells out hook latency, iteration cost, no graceful degradation.
+- **Named alternative?** Yes — a SessionStart hook was the rejected path. The rationale spells out hook latency, iteration cost, no graceful degradation.
 - **Future-revisitable?** Yes — the `## Revisit if` section explicitly includes "rule compliance is poor" and "a SessionStart hook becomes viable." Conviction `arbitrary`.
 - **Rationale outlives the rule file?** Yes — the "rule vs hook" tradeoff applies to any future iteration of session-start automation, not just this one rule.
 
-Routing complement: the CLAUDE.md skip-condition list (`05-vault-session-start.md`) implements the rule and references the WHY only obliquely; that's correct — rules carry behavior, NDR carries rationale.
+Routing complement: the rule file implements the behavior and references the WHY only obliquely; that's correct — rules carry behavior, NDR carries rationale.
 
-### Clean pass — `ndr:0058` (Keep swamp as a subdirectory inside homelab)
+### Clean pass — "Keep the tooling package as a subdirectory of the infra monorepo"
 
-- **Named alternative?** Yes, three of them — separate top-level repo, jj/git submodule, scatter at homelab root. Each rejection has its own reasoning.
+- **Named alternative?** Yes, three of them — separate top-level repo, git submodule, scatter at the monorepo root. Each rejection has its own reasoning.
 - **Future-revisitable?** Yes — the `## Revisit if` section covers publishing-as-template, CI divergence, navigability decay (with the explicit "rename to `tools/`" escape valve).
 - **Rationale outlives the directory layout?** Yes — the atomic-commits-across-trees argument applies even if the structure later moves under a `tools/` umbrella.
 
-### Clean pass via supersession — `ndr:0102` (Markdown remains canonical; swamp migration paused)
+### Clean pass via supersession — "Markdown remains canonical; the database migration is paused"
 
-- **Named alternative?** Yes — three rejected paths (execute as planned, pause-atom without superseding, drop-and-revert).
-- **Future-revisitable?** Yes — load-bearing `## Revisit if` bullets (`obsidian-cli-plus-mcp-sufficient`, `no-concrete-pain-yet`), each an explicit flip condition.
-- **Rationale outlives the code site?** Yes — this is a substrate decision; rationale ("99 atoms with no friction", "Logseq DB-migration cautionary tale") is durational.
+- **Named alternative?** Yes — three rejected paths (execute the migration as planned, pause without superseding, drop-and-revert).
+- **Future-revisitable?** Yes — load-bearing `## Revisit if` bullets ("the current read tooling stops being sufficient", "a concrete pain point appears"), each an explicit flip condition.
+- **Rationale outlives the code site?** Yes — this is a substrate decision; rationale ("N atoms with no friction", a cautionary tale from another tool's DB migration) is durational.
 
-Why this atom is the canonical example of supersession-driven worthiness: 0102 doesn't add a feature, it flips the head because assumptions behind 0070 weakened. The whole reason supersession exists is to record that flip without rewriting history. If the rule was "only capture forward progress," 0102 would be skipped — and the chain head would lie about how the system actually operates.
+Why this shape is the canonical example of supersession-driven worthiness: the successor atom doesn't add a feature, it flips the head because the assumptions behind the original migration decision weakened. The whole reason supersession exists is to record that flip without rewriting history. If the rule was "only capture forward progress," the pause would be skipped — and the chain head would lie about how the system actually operates.
 
-### Close-call pass with routing complement — `ndr:0057` (Stacked-files Jellyfin convention)
+### Close-call pass with routing complement — "Media library uses the stacked-files layout for multi-disc rips"
 
-- **Named alternative?** Yes — single-MKV merge (deferred), per-disc subfolders (rejected), Music Videos collection (rejected).
-- **Future-revisitable?** Yes — the `## Revisit if` section covers per-movie merge upgrades and Jellyfin convention changes.
-- **Rationale outlives the code site?** Mostly — the WHY is partly Jellyfin's documented behavior (which lives in Jellyfin's docs), but the *chosen path among Jellyfin's recognized patterns* is the user's call, and the validated-experiment evidence ("Bruce Springsteen Live in Barcelona, 6 duplicates → 0") is durational.
+- **Named alternative?** Yes — single-file merge (deferred), per-disc subfolders (rejected), a separate collection (rejected).
+- **Future-revisitable?** Yes — the `## Revisit if` section covers per-title merge upgrades and changes to the media server's documented conventions.
+- **Rationale outlives the code site?** Mostly — the WHY is partly the media server's documented behavior (which lives in its docs), but the *chosen path among the recognized patterns* is the user's call, and the validated-experiment evidence ("6 duplicates → 0" on a test title) is durational.
 
-**Routing complement:** this atom benefits from a homelab CLAUDE.md entry that says "media goes in stacked-files layout (`ndr:0057`)" — without it, the convention enforcement lives only in the audit method. The NDR is the WHY, the CLAUDE.md entry is the enforcement, the `swamp model jellyfin audit` is the verification. Three-layer pattern.
+**Routing complement:** this atom benefits from a CLAUDE.md entry in the infra repo that says "media goes in stacked-files layout (`ndr:<id>`)" — without it, the convention enforcement lives only in the audit method. The NDR is the WHY, the CLAUDE.md entry is the enforcement, the audit command is the verification. Three-layer pattern.
 
 ### Synthetic NO example — "Use 8-space indentation in `tools/audit.py`"
 
-Not from the corpus — illustrative only.
+Illustrative only.
 
 - **Named alternative?** Weak — "any other indentation," but the choice isn't substantively debated.
 - **Future-revisitable?** No — once the file is reformatted, the decision is invisible. There's no condition that would flip it.
