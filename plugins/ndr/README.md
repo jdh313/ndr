@@ -19,7 +19,7 @@ and the shared ledger/config model, see the [repo-root README](../../README.md).
 | `/decisions <topic>` | Manual, when the user has a topic or `ndr:` ref in hand | Structured refs resolve with one `ndr resolve` call (drift surfaced automatically); free-text dispatches `@ndr-reader` for search + synthesis |
 | `/ground [scope]` | Before substantive code work, or before delegating to a coding subagent (junior-dev / senior-dev / tech-lead) | Infers scope from CWD / `.ndr.toml` / file path / user phrase, queries the CLI (or `@ndr-reader` for fuzzy scopes), returns a brief plus `ndr:` reference strings the delegating prompt can paste in |
 | `/drift-check [scope]` | Manual, or offered by `spec-flow:close` before archiving | Walks current heads, compares each against a chosen diff scope (working tree / branch range / commit range / full repo), surfaces divergences with three resolutions per item — amend, supersede, revert |
-| `/ndr-bootstrap` | Once per machine after plugin install | Copies the seed decision atoms and the initial taxonomy YAML into the author's Obsidian vault at `~/Loose Ends/` (currently hardcoded). Idempotent |
+| `/ndr-bootstrap` | Once per machine after plugin install | Copies the seed decision atoms and the initial taxonomy YAML into the ledger directory given as the argument (falls back to `$NDR_LEDGER`). Idempotent |
 
 ## Install
 

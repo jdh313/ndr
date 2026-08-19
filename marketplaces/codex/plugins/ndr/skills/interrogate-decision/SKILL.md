@@ -43,7 +43,7 @@ research code ──► name fork ──► first principle ──► tradeoffs 
 
 `ndr` must be on PATH — Move 6 and Move 8 query existing heads to judge composition and routing. Check once with `command -v ndr`; if missing, stop:
 
-> "The `ndr` CLI isn't installed — run `bun run install:bin` in `~/Projects/ndr`, then retry."
+> "The `ndr` CLI isn't installed — install it (`bun install -g https://github.com/jdh313/ndr.git`, or download a release binary), then retry."
 
 ## Relationship to the other surfaces
 

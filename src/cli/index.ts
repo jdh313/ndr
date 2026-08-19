@@ -944,7 +944,7 @@ async function listRepoFiles(repoRoot: string | null): Promise<string[] | null> 
   }
 }
 
-// Corpus health checks (JUN-178, absorbing the ndr-curator agent's mechanical
+// Corpus health checks (absorbing the ndr-curator agent's mechanical
 // sweep). Read-only unless --fix; --fix repairs exactly one finding class —
 // missing superseded_by back-links — then re-scans so the reported findings
 // reflect the post-repair ledger. Exit codes: 0 healthy (or all findings

@@ -4,6 +4,14 @@
   "private": true,
   "license": "Apache-2.0",
   "description": "Capture and resolution tooling for nested decision records.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jdh313/ndr.git"
+  },
+  "homepage": "https://github.com/jdh313/ndr#readme",
+  "bugs": {
+    "url": "https://github.com/jdh313/ndr/issues"
+  },
   "bin": {
     "ndr": "./src/cli/bin.ts"
   },

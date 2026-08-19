@@ -1,6 +1,6 @@
 import type { LedgerScan, Taxonomy } from "../domain/index.ts";
 
-// Backend surface for `ndr doctor` (JUN-178). Kept apart from ReadPort because
+// Backend surface for `ndr doctor`. Kept apart from ReadPort because
 // a doctor scan deliberately returns malformed files instead of skipping them
 // (ndr:0138 governs the bulk read verbs, not health checks), and apart from
 // WritePort because the one allowed mutation is a narrow pointer repair, not a
