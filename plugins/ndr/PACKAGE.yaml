@@ -2,7 +2,7 @@ schema: agentforge.package/v1
 id: ndr
 defaults:
   name: ndr
-  version: 1.0.0-beta
+  version: 1.0.0-beta.1
   description: >-
     Nested decision records — atomic markdown decision atoms with
     supersession-aware reading, routed through the ndr CLI. Initialize a repo
@@ -27,14 +27,17 @@ defaults:
     - architecture
     - knowledge-management
 artifacts:
-  - {type: skill, pattern: 'skills/*/SKILL.md'}
-  - {type: agent, pattern: 'agents/*.md'}
-  - {type: hook, pattern: hooks/hooks.json}
+  - type: skill
+    pattern: skills/*/SKILL.md
+  - type: agent
+    pattern: agents/*.md
+  - type: hook
+    pattern: hooks/hooks.json
 payloads:
   include:
-    - {source: references/}
-    - {source: assets/}
-    - {source: hooks/check-cli-version.sh}
+    - source: references/
+    - source: assets/
+    - source: hooks/check-cli-version.sh
 targets:
   claude: {}
   codex:
@@ -74,7 +77,9 @@ targets:
           the CLI, so the plugin is inert without it.
         developerName: Jacob Hoehler
         category: Developer Tools
-        capabilities: [Read, Write]
+        capabilities:
+          - Read
+          - Write
         defaultPrompt:
           - Capture the decisions from this conversation.
           - What did we decide about this area?
