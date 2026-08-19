@@ -49,6 +49,21 @@ Skills, agents, hooks, references, and assets stay maintained in place under
 generated manifests, keeping the CLI and plugin versions in lockstep
 (`ndr:nbyhyp`).
 
+The compiled plugin `version` fields are the one exception to the
+never-hand-edit rule above, and only because a machine writes them:
+release-please carries `json` `extra-files` entries for
+`.claude-plugin/marketplace.json`, `marketplaces/claude/.claude-plugin/marketplace.json`,
+`marketplaces/claude/plugins/ndr/.claude-plugin/plugin.json`, and
+`marketplaces/codex/plugins/ndr/.codex-plugin/plugin.json`, so the version bump
+lands in the Release PR itself instead of failing the `marketplace` drift gate.
+That gate still recompiles and compares on every PR, so it remains the enforcer
+if the updaters ever diverge from the compiler. Add a new compiled manifest
+carrying a plugin `version`? Add it to both release-please configs too.
+
+The marketplace-level `metadata.version` in the root and Claude marketplace
+manifests is **not** the plugin version — it comes from `MARKETPLACE.yaml` and
+is deliberately outside the jsonpaths above.
+
 Recompile after any change under `plugins/`:
 
 ```sh

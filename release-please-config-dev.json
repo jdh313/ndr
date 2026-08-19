@@ -12,6 +12,26 @@
           "type": "yaml",
           "path": "plugins/ndr/PACKAGE.yaml",
           "jsonpath": "$.defaults.version"
+        },
+        {
+          "type": "json",
+          "path": ".claude-plugin/marketplace.json",
+          "jsonpath": "$.plugins[0].version"
+        },
+        {
+          "type": "json",
+          "path": "marketplaces/claude/.claude-plugin/marketplace.json",
+          "jsonpath": "$.plugins[0].version"
+        },
+        {
+          "type": "json",
+          "path": "marketplaces/claude/plugins/ndr/.claude-plugin/plugin.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "marketplaces/codex/plugins/ndr/.codex-plugin/plugin.json",
+          "jsonpath": "$.version"
         }
       ]
     }
