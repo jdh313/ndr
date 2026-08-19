@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.1](https://github.com/jdh313/ndr/compare/ndr-v1.0.0...ndr-v1.0.1) (2026-08-19)
+
+
+### Bug Fixes
+
+* **marketplace:** publish a root manifest so Claude Code can install from GitHub ([2702b50](https://github.com/jdh313/ndr/commit/2702b50b038b505e4f040b38436de30c80bb6208))
+* **marketplace:** publish a root manifest so Claude Code can install from GitHub ([1e52010](https://github.com/jdh313/ndr/commit/1e52010d584ad62072f10f4f92956d0dcedef047))
+
 ## [1.0.0](https://github.com/jdh313/ndr/compare/ndr-v0.1.0...ndr-v1.0.0) (2026-08-18)
 
 
