@@ -11,5 +11,4 @@ vulnerability"). You should get an acknowledgement within a week.
 
 ## Supported versions
 
-Only the latest stable release (`main`) and the latest beta (`dev`) receive
-fixes.
+Only the latest release receives fixes.

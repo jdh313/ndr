@@ -2,8 +2,9 @@
 
 Thanks for looking. The short version:
 
-1. **Branch from `dev`, PR into `dev`.** `main` only receives release merges
-   (see `.claude/rules/branch-workflow.md`).
+1. **Branch from `main`, PR into `main`.** Nothing is committed to `main`
+   directly — it only receives merges (see
+   `.claude/rules/branch-workflow.md`).
 2. **Conventional commits.** `bun install` sets `core.hooksPath` to
    `.githooks/`, so `commit-msg` runs commitlint locally; CI enforces the same
    rules. Types drive release-please, so `feat:` / `fix:` / `feat!:` matter.

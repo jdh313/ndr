@@ -11,7 +11,6 @@ labels:
   - deployment
 binds:
   - release-please-config.json
-  - release-please-config-dev.json
 supersedes: []
 superseded_by: []
 derived_from:
@@ -25,7 +24,7 @@ informed_by:
 
 ## Decision
 
-Both release-please lanes carry `json` `extra-files` entries for the four
+The release-please config carries `json` `extra-files` entries for the four
 compiled plugin `version` fields, so the version bump lands inside
 release-please's own release commit rather than in a follow-up recompile pushed
 onto the Release-PR branch.
@@ -44,7 +43,7 @@ onto the Release-PR branch.
 ## Commitments
 
 - Adding a compiled manifest that carries a plugin `version` means adding a
-  matching `extra-files` entry to both release-please configs, or the drift
+  matching `extra-files` entry to the release-please config, or the drift
   gate fails on the next release.
 - Two mechanisms now write the same four fields — the AgentForge compiler and
   release-please — and they must agree byte-for-byte.
