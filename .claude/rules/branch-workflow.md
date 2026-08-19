@@ -25,6 +25,12 @@ own release-please instance with its own config, manifest, and changelog.
   sync `.release-please-manifest-dev.json` to the new stable version (so the
   next beta versions above it). Skipping this step is how the lanes drift —
   it is part of cutting a stable, not optional cleanup.
+- **Release PRs need no manual recompile.** Both release-please configs
+  carry `json` `extra-files` entries for the four compiled plugin `version`
+  fields, so the Release PR arrives already passing the `marketplace` drift
+  gate. If one fails that gate, the updaters have drifted from the compiler —
+  fix the configs, do not push a recompile commit onto the release branch
+  (release-please force-pushes it on the next sync and the commit is lost).
 - The lanes' release files are disjoint by design (separate configs,
   manifests, changelogs). Never point both lanes at the same manifest or
   changelog.
