@@ -186,6 +186,28 @@ this CLI.
 /plugin install ndr@ndr
 ```
 
+From a checked-out clone, point at the Claude marketplace tree instead:
+
+```
+/plugin marketplace add /path/to/ndr/marketplaces/claude
+/plugin install ndr@ndr
+```
+
+Both forms install the same plugin. The root `.claude-plugin/marketplace.json`
+is what makes the GitHub form work (Claude Code reads only the root manifest
+and resolves plugin sources against the clone root); it is committed compiler
+output, like `marketplaces/`, and is never hand-edited.
+
+The GitHub form tracks the repo's default branch (`main`, the stable lane).
+`/plugin marketplace add` has no ref flag; to follow the beta channel on `dev`
+instead, register the marketplace in `settings.json` with a pinned `ref`:
+
+```json
+"extraKnownMarketplaces": {
+  "ndr": { "source": { "source": "github", "repo": "jdh313/ndr", "ref": "dev" } }
+}
+```
+
 The plugin requires the `ndr` binary on PATH — build it from a clone with
 `bun run install:bin` (the skills hard-error without it). See
 [plugins/ndr/README.md](./plugins/ndr/README.md).
@@ -204,8 +226,10 @@ plugins/
   ndr/        Claude Code plugin source (skills, agents, hooks,
               references, assets) + PACKAGE.yaml
 MARKETPLACE.yaml   Canonical marketplace definition
+.claude-plugin/    Root Claude manifest (committed AgentForge output — lets
+                   `/plugin marketplace add jdh313/ndr` resolve from the clone root)
 marketplaces/      Committed AgentForge output — never hand-edited
-  claude/          Claude marketplace root (add this path, not the repo root)
+  claude/          Claude marketplace tree (add this path from a local clone)
   codex/           Codex registry
 ```
 

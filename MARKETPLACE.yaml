@@ -11,6 +11,7 @@ publications:
   - id: claude
     target: claude
     destination: .claude-plugin/marketplace.json
+    root-manifest: true
     enrollment:
       mode: all-compatible
     native:
