@@ -1,7 +1,7 @@
 ---
 id: "0q443w"
 title: "Keep two consumer install channels: git-URL bun install and Release binaries"
-status: current
+status: superseded
 decision_date: 2026-07-10
 author: Jacob Hoehler
 conviction: tentative
@@ -13,7 +13,8 @@ binds:
   - package.json
   - README.md
 supersedes: []
-superseded_by: []
+superseded_by:
+  - 03kmgp
 derived_from:
   - "claude-code session 2026-07-10 (distribution debate: Releases vs GH npm
     registry vs git-URL install)"
