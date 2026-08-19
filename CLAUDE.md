@@ -58,7 +58,7 @@ release-please carries `json` `extra-files` entries for
 lands in the Release PR itself instead of failing the `marketplace` drift gate.
 That gate still recompiles and compares on every PR, so it remains the enforcer
 if the updaters ever diverge from the compiler. Add a new compiled manifest
-carrying a plugin `version`? Add it to both release-please configs too.
+carrying a plugin `version`? Add it to `release-please-config.json` too.
 
 The marketplace-level `metadata.version` in the root and Claude marketplace
 manifests is **not** the plugin version — it comes from `MARKETPLACE.yaml` and

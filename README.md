@@ -198,15 +198,8 @@ is what makes the GitHub form work (Claude Code reads only the root manifest
 and resolves plugin sources against the clone root); it is committed compiler
 output, like `marketplaces/`, and is never hand-edited.
 
-The GitHub form tracks the repo's default branch (`main`, the stable lane).
-`/plugin marketplace add` has no ref flag; to follow the beta channel on `dev`
-instead, register the marketplace in `settings.json` with a pinned `ref`:
-
-```json
-"extraKnownMarketplaces": {
-  "ndr": { "source": { "source": "github", "repo": "jdh313/ndr", "ref": "dev" } }
-}
-```
+The GitHub form tracks the repo's default branch (`main`), which is the only
+release lane — every release is cut from it.
 
 The plugin requires the `ndr` binary on PATH — build it from a clone with
 `bun run install:bin` (the skills hard-error without it). See
@@ -249,7 +242,7 @@ bun run typecheck
 ```
 
 CI (GitHub Actions) runs the same gates — test, lint, `format:check`,
-typecheck, plus a `bun build --compile` smoke — on every PR to `main` and `dev`.
+typecheck, plus a `bun build --compile` smoke — on every PR to `main`.
 A second job recompiles `marketplaces/` through a pinned AgentForge and fails on
 any drift from the committed output.
 

@@ -1,7 +1,7 @@
 ---
 id: "5na05k"
 title: "Adopt a two-lane release model: betas from dev, stables from main"
-status: current
+status: superseded
 decision_date: 2026-07-10
 author: Jacob Hoehler
 conviction: tentative
@@ -13,7 +13,8 @@ binds:
   - .github/workflows/**
   - .claude/rules/branch-workflow.md
 supersedes: []
-superseded_by: []
+superseded_by:
+  - v6jda1
 derived_from:
   - claude-code session 2026-07-10 (release-please on dev discussion)
 informed_by:
