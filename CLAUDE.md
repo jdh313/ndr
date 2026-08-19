@@ -67,13 +67,13 @@ is deliberately outside the jsonpaths above.
 Recompile after any change under `plugins/`:
 
 ```sh
-# one-time: check out the pinned compiler (the SHA is AGENTFORGE_REF in
-# .github/workflows/ci.yml; jdh313/agentforge is public)
-git clone https://github.com/jdh313/agentforge "$TMPDIR/af-pin"
-git -C "$TMPDIR/af-pin" checkout <AGENTFORGE_REF>
-bun install --cwd "$TMPDIR/af-pin" --frozen-lockfile
+# one-time: download the pinned compiler binary (version + sha256 are
+# AGENTFORGE_VERSION / AGENTFORGE_SHA256 in .github/workflows/ci.yml)
+curl -fsSLO "https://github.com/jdh313/agentforge/releases/download/v<AGENTFORGE_VERSION>/agentforge-linux-x64"
+echo "<AGENTFORGE_SHA256>  agentforge-linux-x64" | sha256sum -c
+chmod +x agentforge-linux-x64
 
-bun run "$TMPDIR/af-pin/src/cli.ts" compile MARKETPLACE.yaml --out marketplaces
+./agentforge-linux-x64 compile MARKETPLACE.yaml --out marketplaces
 ```
 
 Any `agentforge` already on your PATH (a dev build, a different tag) is
