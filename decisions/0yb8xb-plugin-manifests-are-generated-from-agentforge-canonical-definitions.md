@@ -14,7 +14,6 @@ binds:
   - plugins/ndr/PACKAGE.yaml
   - marketplaces/**
   - release-please-config.json
-  - release-please-config-dev.json
   - .github/workflows/ci.yml
 supersedes:
   - h7vdvf

@@ -11,7 +11,6 @@ labels:
   - deployment
 binds:
   - release-please-config.json
-  - release-please-config-dev.json
   - plugins/ndr/PACKAGE.yaml
 supersedes: []
 superseded_by: []
