@@ -1,7 +1,7 @@
 ---
 id: "h4yfcd"
 title: Supersession lineage is a DAG, with splits gated on disjoint scopes
-status: current
+status: superseded
 decision_date: 2026-08-22
 author: Jacob Hoehler
 conviction: tentative
@@ -14,7 +14,8 @@ binds:
   - src/ports/read.ts
 supersedes:
   - "0145"
-superseded_by: []
+superseded_by:
+  - 2g38t4
 derived_from:
   - https://claude.ai/code/artifact/4b17e014-3dd9-428a-b3e3-efc8390ef48d
 informed_by:
