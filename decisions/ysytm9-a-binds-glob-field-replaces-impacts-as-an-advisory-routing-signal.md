@@ -1,7 +1,7 @@
 ---
 id: "ysytm9"
 title: A binds glob field replaces impacts as an advisory routing signal
-status: current
+status: superseded
 decision_date: 2026-07-08
 author: Jacob Hoehler
 conviction: strong
@@ -11,7 +11,8 @@ labels:
   - tooling
 binds: []
 supersedes: []
-superseded_by: []
+superseded_by:
+  - hk0083
 derived_from:
   - docs/superpowers/specs/2026-07-08-atom-format-redesign.md
 informed_by:

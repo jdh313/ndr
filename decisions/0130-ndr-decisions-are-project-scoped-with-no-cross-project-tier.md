@@ -1,7 +1,7 @@
 ---
 id: "0130"
 title: NDR decisions are project-scoped with no cross-project tier
-status: current
+status: superseded
 decision_date: 2026-06-01
 author: Jacob Hoehler
 conviction: tentative
@@ -11,7 +11,8 @@ labels:
   - file-organization
 binds: []
 supersedes: []
-superseded_by: []
+superseded_by:
+  - 15qzf2
 derived_from:
   - Mulling/2026-05-31_ndr-shape-and-storage
 informed_by: []
