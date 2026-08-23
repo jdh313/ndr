@@ -2,7 +2,7 @@
 id: "2g38t4"
 title: Supersession admits disjoint splits and strict-subset carve-outs, making
   status scope-relative
-status: current
+status: superseded
 decision_date: 2026-08-22
 author: Jacob Hoehler
 conviction: tentative
@@ -16,7 +16,8 @@ binds:
   - src/domain/doctor.ts
 supersedes:
   - h4yfcd
-superseded_by: []
+superseded_by:
+  - jkxmp5
 derived_from: []
 informed_by:
   - 15qzf2
