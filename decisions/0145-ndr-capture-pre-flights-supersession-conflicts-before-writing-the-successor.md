@@ -1,7 +1,7 @@
 ---
 id: "0145"
 title: ndr capture pre-flights supersession conflicts before writing the successor
-status: current
+status: superseded
 decision_date: 2026-06-02
 author: Jacob Hoehler
 conviction: tentative
@@ -11,7 +11,8 @@ labels:
   - supersession
 binds: []
 supersedes: []
-superseded_by: []
+superseded_by:
+  - h4yfcd
 derived_from: []
 informed_by:
   - "0051"
