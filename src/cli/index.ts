@@ -929,19 +929,95 @@ interface RepairApplied {
   readonly value: string;
 }
 
-// File inventory for binds checks. `git ls-files` respects .gitignore and is
-// fast; a non-git root (or no root at all) yields null, which skips the
-// binds_stale class rather than failing the sweep.
-async function listRepoFiles(repoRoot: string | null): Promise<string[] | null> {
-  if (repoRoot === null) return null;
+// A tracked-file enumeration, or null when this source could not answer.
+// Zero paths is *inconclusive*, never "the repo has no files": `git -C <dir>
+// ls-files` is cwd-scoped, so inside a jj workspace with no git index of its
+// own it exits 0 and prints nothing. Reading that as an empty repo failed
+// every bind glob at once and reported a corpus-wide catastrophe on a healthy
+// ledger (GH-20). A repo that genuinely tracks nothing cannot have satisfiable
+// binds anyway, so collapsing the two costs no true finding.
+type FileEnumeration = (repoRoot: string) => Promise<string[] | null>;
+
+function toInventory(stdout: string): string[] | null {
+  const files = stdout.split("\n").filter((l) => l.length > 0);
+  return files.length > 0 ? files : null;
+}
+
+const enumerateGitFiles: FileEnumeration = async (repoRoot) => {
   try {
     const { stdout } = await execFileAsync("git", ["-C", repoRoot, "ls-files"], {
       maxBuffer: 16 * 1024 * 1024,
     });
-    return stdout.split("\n").filter((l) => l.length > 0);
+    return toInventory(stdout);
   } catch {
     return null;
   }
+};
+
+// Two flags here are load-bearing, not hygiene:
+//
+//   --ignore-working-copy  keeps this read-only. jj's default is to snapshot
+//     the working copy first, which WRITES a commit — so a health check would
+//     mutate the repo it inspects, and outright fails where commits are signed
+//     and the agent is locked.
+//   -T 'path ++ "\n"'  emits repo-root-relative paths whatever the process cwd
+//     is. The default template is cwd-relative, which yields `../../..` paths
+//     that match no bind glob — a non-empty, unmatchable list, worse than no
+//     list because it never falls through. The explicit template also pins the
+//     output against a user's `templates.file_list` override.
+//
+// `-R` selects which repo answers; it does not set the path base. `cwd` is
+// belt-and-braces behind the template.
+const enumerateJjFiles: FileEnumeration = async (repoRoot) => {
+  try {
+    const { stdout } = await execFileAsync(
+      "jj",
+      [
+        "--ignore-working-copy",
+        "--color=never",
+        "--no-pager",
+        "-R",
+        repoRoot,
+        "file",
+        "list",
+        "-T",
+        'path ++ "\\n"',
+      ],
+      { cwd: repoRoot, maxBuffer: 16 * 1024 * 1024 },
+    );
+    return toInventory(stdout);
+  } catch {
+    return null;
+  }
+};
+
+// jj is a usable source only when `.jj` sits at `repoRoot` itself — an
+// ancestor's inventory is based on the wrong root, so it would look right and
+// match wrong. This is why the check is a stat and not `jj root` or
+// `jj workspace root`: both walk up, so both answer for any descendant of a jj
+// repo. The stat is also why a plain-git user never spawns jj at all.
+async function isJjWorkspaceRoot(repoRoot: string): Promise<boolean> {
+  try {
+    return (await fs.stat(path.join(repoRoot, ".jj"))).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+// File inventory for binds checks, sourced from whichever VCS actually answers
+// for this root. The working-copy VCS is asked first; a source that cannot
+// answer falls through to the next. All sources exhausted (or no root at all)
+// yields null, which skips the binds_stale class rather than reporting it wrong.
+async function listRepoFiles(repoRoot: string | null): Promise<string[] | null> {
+  if (repoRoot === null) return null;
+  const sources: FileEnumeration[] = (await isJjWorkspaceRoot(repoRoot))
+    ? [enumerateJjFiles, enumerateGitFiles]
+    : [enumerateGitFiles];
+  for (const enumerate of sources) {
+    const files = await enumerate(repoRoot);
+    if (files !== null) return files;
+  }
+  return null;
 }
 
 // Corpus health checks (absorbing the ndr-curator agent's mechanical
@@ -1004,7 +1080,12 @@ export async function doctorCommand(
   let stderr = report.taxonomyChecked
     ? ""
     : `ndr: no readable .taxonomy/ in ${ledgerPath} — taxonomy checks skipped\n`;
-  if (repoFiles === null) stderr += "ndr: no repo root — binds checks skipped\n";
+  if (repoFiles === null) {
+    stderr +=
+      repoRoot === null
+        ? "ndr: no repo root — binds checks skipped\n"
+        : "ndr: no file inventory from git or jj — binds checks skipped\n";
+  }
   const stdout =
     opts.json === true
       ? formatDoctorJson(report, ledgerPath, repairsApplied)
