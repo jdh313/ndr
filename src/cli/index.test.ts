@@ -1002,7 +1002,11 @@ describe("ndr doctor", () => {
     const originalPath = process.env.PATH;
     process.env.PATH = `${bin}${path.delimiter}${originalPath ?? ""}`;
     try {
-      await writeAtom(tmp, "0001-binds.md", { id: "0001", title: "Binds atom", binds: ["kept.ts"] });
+      await writeAtom(tmp, "0001-binds.md", {
+        id: "0001",
+        title: "Binds atom",
+        binds: ["kept.ts"],
+      });
       const result = await doctorCommand(tmp, { json: true, repoRoot });
       expect(JSON.parse(result.stdout).issues.binds_stale).toEqual([]);
       expect(result.stderr).not.toContain("binds checks skipped");
