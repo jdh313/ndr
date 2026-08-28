@@ -1,6 +1,6 @@
 {
   "name": "ndr",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Nested decision records — atomic markdown decision atoms with supersession-aware reading, routed through the ndr CLI. Initialize a repo with `ndr init`, capture engineering decisions from any chat (/capture-decision), deeply interrogate a candidate decision before capturing it (/interrogate-decision), query the corpus by topic with automatic supersession resolution (/decisions <topic>), ground a coding session in relevant prior decisions before edits (/ground), audit code against current decision heads with /drift-check, and optionally bootstrap Obsidian vault content (/ndr-bootstrap). Requires the ndr binary on PATH (bun run install:bin).",
   "author": {
     "name": "Jacob Hoehler"

@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.2](https://github.com/jdh313/ndr/compare/ndr-v1.0.1...ndr-v1.0.2) (2026-08-28)
+
+
+### Bug Fixes
+
+* **decisions:** drop the deleted dev release config from stale binds ([d4560f0](https://github.com/jdh313/ndr/commit/d4560f017f3263c65b08aad25b2c682afdd0ba0a))
+* **decisions:** drop the deleted dev release config from stale binds ([52f3d04](https://github.com/jdh313/ndr/commit/52f3d0491955b2020db2dd9d7e996253fbe261d8))
+* **doctor:** source the binds inventory from the repo's actual VCS ([b4c32cb](https://github.com/jdh313/ndr/commit/b4c32cb648f0fd3ee35a2fd16a62b0092a45252c))
+* **doctor:** source the binds inventory from the repo's actual VCS ([9b0afdd](https://github.com/jdh313/ndr/commit/9b0afdde2b54ef28bbec50a2a12e29debbeffe2c)), closes [#20](https://github.com/jdh313/ndr/issues/20)
+
 ## [1.0.1](https://github.com/jdh313/ndr/compare/ndr-v1.0.0...ndr-v1.0.1) (2026-08-19)
 
 
