@@ -276,8 +276,10 @@ function checkTaxonomy(atom: ScannedAtom, taxonomy: Taxonomy, findings: Finding[
 // ── Binds staleness ──────────────────────────────────────────────────────────
 // Stale binds: a current head whose glob matches nothing in the repo file
 // list. Advisory — doctor reports, never rewrites (spec: rot-detection).
-// repoFiles === null means the caller had no repo context (flag/env ledger);
-// the class is skipped entirely.
+// repoFiles === null means no file inventory was established — either the
+// caller had no repo context (flag/env ledger), or a repo root exists and no
+// VCS source could enumerate it. Either way the class is skipped entirely;
+// the caller distinguishes the two causes in what it prints.
 function checkBindsStale(
   atom: ScannedAtom,
   repoFiles: readonly string[],

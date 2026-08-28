@@ -25,6 +25,13 @@ import {
 const FIXTURES = path.resolve(import.meta.dir, "../../test/fixtures/ledger");
 const execFileAsync = promisify(execFile);
 
+// jj is optional for developing ndr, so the one test that needs a real jj repo
+// is gated. Every other jj behavior is covered by a sentinel binary on PATH.
+const JJ_AVAILABLE = await execFileAsync("jj", ["--version"]).then(
+  () => true,
+  () => false,
+);
+
 async function makeLedger(): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-cli-"));
   const taxonomy = path.join(dir, ".taxonomy");
@@ -694,6 +701,63 @@ describe("ndr doctor", () => {
     return dir;
   }
 
+  // A git repo that tracks nothing: `git ls-files` exits 0 and prints nothing,
+  // the same shape a jj workspace produces. The inventory must read that as
+  // unknown, not as "this repo has no files" (GH-20).
+  async function mkEmptyGitRepo(): Promise<string> {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-doctor-emptyrepo-"));
+    await execFileAsync("git", ["init", "-q"], { cwd: dir });
+    return dir;
+  }
+
+  // A jj config the fixture can be built under no matter how the developer's
+  // own jj is set up. `signing.behavior = "drop"` is the load-bearing key:
+  // jj writes a working-copy commit on init and on every snapshot, and a repo
+  // configured to SSH-sign fails both when the agent is locked.
+  async function mkJjConfig(): Promise<string> {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-doctor-jjconf-"));
+    const file = path.join(dir, "config.toml");
+    await fs.writeFile(
+      file,
+      '[user]\nname = "ndr test"\nemail = "test@example.invalid"\n\n[signing]\nbehavior = "drop"\n',
+      "utf8",
+    );
+    return file;
+  }
+
+  // A real jj repo. `src/deep.ts` is the load-bearing file: a nested path is
+  // where a cwd-relative path base would show itself.
+  //
+  // The trailing `jj status` is deliberate and is this fixture's `git add`.
+  // doctor reads with --ignore-working-copy so it never writes, which means it
+  // sees the last recorded snapshot — files written and never snapshotted are
+  // invisible to it, exactly as un-added files are invisible to `git ls-files`.
+  async function mkJjRepo(): Promise<string> {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-doctor-jjrepo-"));
+    await execFileAsync("jj", ["git", "init", dir]);
+    await fs.mkdir(path.join(dir, "src"));
+    await fs.writeFile(path.join(dir, "kept.ts"), "export {};\n", "utf8");
+    await fs.writeFile(path.join(dir, "src", "deep.ts"), "export {};\n", "utf8");
+    await execFileAsync("jj", ["-R", dir, "status"], { cwd: dir });
+    return dir;
+  }
+
+  // A stand-in `jj` that records having been run and answers nothing. Lets the
+  // no-spawn and fall-through promises be observed without jj installed.
+  async function mkSentinelJjBin(marker: string): Promise<string> {
+    const bin = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-doctor-bin-"));
+    await fs.writeFile(path.join(bin, "jj"), `#!/bin/sh\n: > ${JSON.stringify(marker)}\n`, "utf8");
+    await fs.chmod(path.join(bin, "jj"), 0o755);
+    return bin;
+  }
+
+  async function exists(p: string): Promise<boolean> {
+    return fs.access(p).then(
+      () => true,
+      () => false,
+    );
+  }
+
   async function snapshotLedger(dir: string): Promise<Map<string, string>> {
     const out = new Map<string, string>();
     for (const name of await fs.readdir(dir)) {
@@ -859,6 +923,203 @@ describe("ndr doctor", () => {
     const report = JSON.parse(result.stdout);
     expect(report.issues.binds_stale).toEqual([]);
     expect(result.stderr).toContain("binds checks skipped");
+  });
+
+  // ── GH-20: an inventory of zero paths is unknown, not empty ────────────────
+
+  test("an enumeration of zero paths skips binds rather than failing every glob", async () => {
+    const repoRoot = await mkEmptyGitRepo();
+    try {
+      await writeAtom(tmp, "0001-binds.md", {
+        id: "0001",
+        title: "Binds atom",
+        binds: ["src/**"],
+      });
+      const result = await doctorCommand(tmp, { json: true, repoRoot });
+      const report = JSON.parse(result.stdout);
+      expect(report.issues.binds_stale).toEqual([]);
+      expect(result.stderr).toContain("no file inventory from git or jj — binds checks skipped");
+    } finally {
+      await fs.rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("the skip note names which condition skipped the class", async () => {
+    await writeAtom(tmp, "0001-binds.md", { id: "0001", title: "Binds atom", binds: ["src/**"] });
+    const noRoot = await doctorCommand(tmp, { json: true, repoRoot: null });
+    const repoRoot = await mkEmptyGitRepo();
+    try {
+      const noInventory = await doctorCommand(tmp, { json: true, repoRoot });
+      expect(noRoot.stderr).toContain("no repo root");
+      expect(noInventory.stderr).toContain("no file inventory from git or jj");
+      expect(noInventory.stderr).not.toContain("no repo root");
+    } finally {
+      await fs.rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("a plain-git root spawns no jj; a .jj root does, and git carries the fall-through", async () => {
+    const marker = path.join(os.tmpdir(), `ndr-doctor-jj-spawned-${process.pid}`);
+    const bin = await mkSentinelJjBin(marker);
+    const gitOnly = await mkGitRepo("kept.ts");
+    const jjMarked = await mkGitRepo("kept.ts");
+    await fs.mkdir(path.join(jjMarked, ".jj"));
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${bin}${path.delimiter}${originalPath ?? ""}`;
+    try {
+      await writeAtom(tmp, "0001-binds.md", {
+        id: "0001",
+        title: "Binds atom",
+        binds: ["nowhere/**"],
+      });
+
+      await fs.rm(marker, { force: true });
+      const plain = await doctorCommand(tmp, { json: true, repoRoot: gitOnly });
+      expect(await exists(marker)).toBe(false);
+      expect(JSON.parse(plain.stdout).issues.binds_stale.length).toBeGreaterThan(0);
+
+      // The sentinel answers nothing, so git must carry the inventory — the
+      // finding is still reported and the class is never skipped.
+      const jj = await doctorCommand(tmp, { json: true, repoRoot: jjMarked });
+      expect(await exists(marker)).toBe(true);
+      expect(JSON.parse(jj.stdout).issues.binds_stale.length).toBeGreaterThan(0);
+      expect(jj.stderr).not.toContain("binds checks skipped");
+    } finally {
+      process.env.PATH = originalPath;
+      await fs.rm(marker, { force: true });
+      for (const dir of [bin, gitOnly, jjMarked]) {
+        await fs.rm(dir, { recursive: true, force: true });
+      }
+    }
+  });
+
+  test("doctor survives a jj that is absent or fails, falling back to git", async () => {
+    const bin = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-doctor-bin-"));
+    await fs.writeFile(path.join(bin, "jj"), "#!/bin/sh\nexit 3\n", "utf8");
+    await fs.chmod(path.join(bin, "jj"), 0o755);
+    const repoRoot = await mkGitRepo("kept.ts");
+    await fs.mkdir(path.join(repoRoot, ".jj"));
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${bin}${path.delimiter}${originalPath ?? ""}`;
+    try {
+      await writeAtom(tmp, "0001-binds.md", {
+        id: "0001",
+        title: "Binds atom",
+        binds: ["kept.ts"],
+      });
+      const result = await doctorCommand(tmp, { json: true, repoRoot });
+      expect(JSON.parse(result.stdout).issues.binds_stale).toEqual([]);
+      expect(result.stderr).not.toContain("binds checks skipped");
+    } finally {
+      process.env.PATH = originalPath;
+      for (const dir of [bin, repoRoot]) {
+        await fs.rm(dir, { recursive: true, force: true });
+      }
+    }
+  });
+
+  test.skipIf(!JJ_AVAILABLE)(
+    "a jj root sources the inventory from jj, with paths relative to the repo root",
+    async () => {
+      const originalJjConfig = process.env.JJ_CONFIG;
+      process.env.JJ_CONFIG = await mkJjConfig();
+      const repoRoot = await mkJjRepo();
+      try {
+        // `src/**` is the load-bearing glob: it only matches if the inventory
+        // is repo-root-relative. A cwd-relative one yields `../../..` paths.
+        await writeAtom(tmp, "0001-nested.md", {
+          id: "0001",
+          title: "Nested bind",
+          binds: ["src/**"],
+        });
+        await writeAtom(tmp, "0002-root.md", {
+          id: "0002",
+          title: "Root bind",
+          binds: ["kept.ts"],
+        });
+        await writeAtom(tmp, "0003-gone.md", {
+          id: "0003",
+          title: "Absent bind",
+          binds: ["nowhere/**"],
+        });
+        const result = await doctorCommand(tmp, { json: true, repoRoot });
+        const stale = JSON.parse(result.stdout).issues.binds_stale;
+        // Exactly the genuinely-unmatched glob, proving an inventory was
+        // obtained (not skipped) and that it matched on both path depths.
+        expect(stale).toHaveLength(1);
+        expect(stale[0].path).toContain("0003-gone.md");
+        expect(result.stderr).not.toContain("binds checks skipped");
+      } finally {
+        process.env.JJ_CONFIG = originalJjConfig;
+        await fs.rm(repoRoot, { recursive: true, force: true });
+      }
+    },
+  );
+
+  test.skipIf(!JJ_AVAILABLE)(
+    "the jj inventory does not vary with the directory doctor was invoked from",
+    async () => {
+      const originalJjConfig = process.env.JJ_CONFIG;
+      process.env.JJ_CONFIG = await mkJjConfig();
+      const repoRoot = await mkJjRepo();
+      const elsewhere = await fs.mkdtemp(path.join(os.tmpdir(), "ndr-doctor-cwd-"));
+      const originalCwd = process.cwd();
+      try {
+        await writeAtom(tmp, "0001-nested.md", {
+          id: "0001",
+          title: "Nested bind",
+          binds: ["src/**"],
+        });
+        process.chdir(repoRoot);
+        const fromRoot = await doctorCommand(tmp, { json: true, repoRoot });
+        process.chdir(elsewhere);
+        const fromElsewhere = await doctorCommand(tmp, { json: true, repoRoot });
+        // A cwd-relative path base would make `src/**` miss from `elsewhere`
+        // and match from the root — identical output is the proof it doesn't.
+        expect(fromElsewhere.stdout).toEqual(fromRoot.stdout);
+        expect(JSON.parse(fromElsewhere.stdout).issues.binds_stale).toEqual([]);
+      } finally {
+        process.chdir(originalCwd);
+        process.env.JJ_CONFIG = originalJjConfig;
+        for (const dir of [repoRoot, elsewhere]) {
+          await fs.rm(dir, { recursive: true, force: true });
+        }
+      }
+    },
+  );
+
+  test.skipIf(!JJ_AVAILABLE)("doctor does not mutate the jj repo it inspects", async () => {
+    const originalJjConfig = process.env.JJ_CONFIG;
+    process.env.JJ_CONFIG = await mkJjConfig();
+    const repoRoot = await mkJjRepo();
+    const opHead = async (): Promise<string> =>
+      (
+        await execFileAsync("jj", [
+          "--ignore-working-copy",
+          "-R",
+          repoRoot,
+          "op",
+          "log",
+          "--no-graph",
+          "--limit",
+          "1",
+          "-T",
+          "id.short()",
+        ])
+      ).stdout;
+    try {
+      await writeAtom(tmp, "0001-nested.md", {
+        id: "0001",
+        title: "Nested bind",
+        binds: ["src/**"],
+      });
+      const before = await opHead();
+      await doctorCommand(tmp, { json: true, repoRoot });
+      expect(await opHead()).toEqual(before);
+    } finally {
+      process.env.JJ_CONFIG = originalJjConfig;
+      await fs.rm(repoRoot, { recursive: true, force: true });
+    }
   });
 
   test("human report groups findings under the new check-class labels", async () => {
