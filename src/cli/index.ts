@@ -1332,23 +1332,36 @@ export function formatBrief(
 }
 
 // Compact one-line summary used by the list verbs (search, current, resolve
-// <label>) when neither --verbose nor --full is set.
+// <label>) when neither --verbose nor --full is set. A non-current atom (only
+// `search --include-superseded` returns one) gets a trailing
+// "(superseded by <id>)" marker.
 function formatCompactLine(atom: Atom): string {
   const fm = atom.frontmatter;
-  const marker = fm.status === "current" ? "" : `  (${supersededLabel(atom)})`;
+  const marker = fm.status === "current" ? "" : `  (${nonCurrentMarker(atom)})`;
   return `${fm.id}  ${fm.title}  [${fm.labels.join(",")}]${marker}`;
 }
 
 // Marker text for a non-current atom surfaced by `search --include-superseded`.
-function supersededLabel(atom: Atom): string {
+function nonCurrentMarker(atom: Atom): string {
   const fm = atom.frontmatter;
   if (fm.superseded_by.length > 0) return `superseded by ${fm.superseded_by.join(", ")}`;
   return fm.status;
 }
 
+// Warning line prefixed to a non-current atom's brief, in the `⚠ <Label>: ...`
+// shape of resolve's drift line. It names the immediate successor, not the head.
+function nonCurrentWarning(atom: Atom): string {
+  const fm = atom.frontmatter;
+  if (fm.superseded_by.length > 0) {
+    return `⚠ Superseded: ${fm.id} → ${fm.superseded_by.join(", ")}`;
+  }
+  return `⚠ ${fm.status.charAt(0).toUpperCase()}${fm.status.slice(1)}`;
+}
+
 // `full` is the top rung of the verbosity ladder (compact → brief → full) and
 // implies expansion, so it overrides `verbose`: each head renders as a full
-// brief carrying its complete body.
+// brief carrying its complete body. A non-current atom's brief is prefixed with
+// a warning line.
 async function formatAtomList(
   atoms: readonly Atom[],
   verbose: boolean,
@@ -1364,9 +1377,7 @@ async function formatAtomList(
     const filename = await adapter.getAtomFilename(asAtomId(atom.frontmatter.id));
     const brief = formatBrief([atom], filename, full);
     blocks.push(
-      atom.frontmatter.status === "current"
-        ? brief
-        : `⚠ ${supersededLabel(atom).replace(/^superseded/, "Superseded")}\n${brief}`,
+      atom.frontmatter.status === "current" ? brief : `${nonCurrentWarning(atom)}\n${brief}`,
     );
   }
   return blocks.join("\n");

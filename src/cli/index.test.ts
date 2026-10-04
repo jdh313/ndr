@@ -337,7 +337,22 @@ describe("ndr search <query>", () => {
       includeSuperseded: true,
       verbose: true,
     });
-    expect(result.stdout).toContain("⚠ Superseded by 0102");
+    expect(result.stdout).toContain("⚠ Superseded: 0070 → 0102");
+  });
+
+  test("--include-superseded --json carries each atom's status", async () => {
+    const list = JSON.parse(
+      (
+        await searchCommand("hybrid architecture", FIXTURES, {
+          includeSuperseded: true,
+          json: true,
+        })
+      ).stdout,
+    );
+    const statuses = Object.fromEntries(
+      list.atoms.map((a: { id: string; status: string }) => [a.id, a.status]),
+    );
+    expect(statuses["0070"]).toBe("superseded");
   });
 
   test("no-match query reports cleanly on stdout and exits 0", async () => {
