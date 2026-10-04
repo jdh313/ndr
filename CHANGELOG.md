@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.2](https://github.com/jdh313/ndr/compare/ndr-v1.0.1...ndr-v1.0.2) (2026-10-04)
+
+
+### Bug Fixes
+
+* **decisions:** drop the deleted dev release config from stale binds ([d4560f0](https://github.com/jdh313/ndr/commit/d4560f017f3263c65b08aad25b2c682afdd0ba0a))
+* **decisions:** drop the deleted dev release config from stale binds ([52f3d04](https://github.com/jdh313/ndr/commit/52f3d0491955b2020db2dd9d7e996253fbe261d8))
+* **doctor:** source the binds inventory from the repo's actual VCS ([b4c32cb](https://github.com/jdh313/ndr/commit/b4c32cb648f0fd3ee35a2fd16a62b0092a45252c))
+* **doctor:** source the binds inventory from the repo's actual VCS ([9b0afdd](https://github.com/jdh313/ndr/commit/9b0afdde2b54ef28bbec50a2a12e29debbeffe2c)), closes [#20](https://github.com/jdh313/ndr/issues/20)
+* **search:** align superseded warning with drift-line shape; review fixes ([7cb9c13](https://github.com/jdh313/ndr/commit/7cb9c132581bf591fc4461523d2dc7cac57b6fe1))
+* **search:** exclude superseded atoms from ndr search by default ([36414e5](https://github.com/jdh313/ndr/commit/36414e59ab7e79c170fbc13e720e3129fb4156bb))
+* **search:** exclude superseded atoms from ndr search by default ([4d73e69](https://github.com/jdh313/ndr/commit/4d73e697253d8a816109f8fa4bb47a9e69001b36))
+
 ## [1.0.1](https://github.com/jdh313/ndr/compare/ndr-v1.0.0...ndr-v1.0.1) (2026-08-19)
 
 
