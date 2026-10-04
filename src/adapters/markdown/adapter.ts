@@ -20,7 +20,7 @@ import {
   type Taxonomy,
 } from "../../domain/index.ts";
 import type { DoctorPort } from "../../ports/doctor.ts";
-import type { CurrentFilter, ReadPort } from "../../ports/read.ts";
+import type { CurrentFilter, ReadPort, SearchFilter } from "../../ports/read.ts";
 import type { CaptureResult, SupersededRecord, WritePort } from "../../ports/write.ts";
 import { joinFrontmatter, splitFrontmatter } from "./fence.ts";
 import { appendToSequence, parseFrontmatterYaml, stringifyFrontmatter } from "./yaml.ts";
@@ -158,12 +158,16 @@ export class MarkdownLedgerAdapter implements ReadPort, WritePort, DoctorPort {
       .sort((a, b) => a.frontmatter.id.localeCompare(b.frontmatter.id));
   }
 
-  async searchFreeText(query: string): Promise<Atom[]> {
+  // Heads only by default, using the same status predicate as listCurrent
+  // (ndr:x4rf23); live-ness is not derived from superseded_by (ndr:jkxmp5).
+  async searchFreeText(query: string, filter: SearchFilter = {}): Promise<Atom[]> {
     const needle = query.toLowerCase();
     const atoms = await this.readAllAtoms();
     return atoms.filter(
       (a) =>
-        a.body.toLowerCase().includes(needle) || a.frontmatter.title.toLowerCase().includes(needle),
+        (filter.includeSuperseded === true || a.frontmatter.status === "current") &&
+        (a.body.toLowerCase().includes(needle) ||
+          a.frontmatter.title.toLowerCase().includes(needle)),
     );
   }
 

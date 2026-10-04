@@ -317,6 +317,44 @@ describe("ndr search <query>", () => {
     expect(result.stdout).toContain("0051");
   });
 
+  test("excludes superseded atoms by default", async () => {
+    const result = await searchCommand("hybrid architecture", FIXTURES);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).not.toContain("0070");
+  });
+
+  test("--include-superseded returns superseded atoms with a marker", async () => {
+    const result = await searchCommand("hybrid architecture", FIXTURES, {
+      includeSuperseded: true,
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("0070");
+    expect(result.stdout).toContain("(superseded by 0102)");
+  });
+
+  test("--include-superseded --verbose prefixes a warning on superseded briefs", async () => {
+    const result = await searchCommand("hybrid architecture", FIXTURES, {
+      includeSuperseded: true,
+      verbose: true,
+    });
+    expect(result.stdout).toContain("⚠ Superseded: 0070 → 0102");
+  });
+
+  test("--include-superseded --json carries each atom's status", async () => {
+    const list = JSON.parse(
+      (
+        await searchCommand("hybrid architecture", FIXTURES, {
+          includeSuperseded: true,
+          json: true,
+        })
+      ).stdout,
+    );
+    const statuses = Object.fromEntries(
+      list.atoms.map((a: { id: string; status: string }) => [a.id, a.status]),
+    );
+    expect(statuses["0070"]).toBe("superseded");
+  });
+
   test("no-match query reports cleanly on stdout and exits 0", async () => {
     const result = await searchCommand("zzz-no-match-zzz", FIXTURES);
     expect(result.exitCode).toBe(0);

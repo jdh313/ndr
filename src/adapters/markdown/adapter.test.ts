@@ -141,6 +141,21 @@ describe("MarkdownLedgerAdapter reads", () => {
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
+  test("searchFreeText excludes superseded atoms by default and returns them with includeSuperseded", async () => {
+    await seedAtom(tmp, { id: "0001", title: "Gadget policy" });
+    await seedAtom(tmp, {
+      id: "0002",
+      title: "Gadget policy old",
+      status: "superseded",
+      supersededBy: ["0001"],
+    });
+    const adapter = new MarkdownLedgerAdapter(tmp);
+    const def = await adapter.searchFreeText("gadget");
+    expect(def.map((x) => x.frontmatter.id)).toEqual(["0001"]);
+    const all = await adapter.searchFreeText("gadget", { includeSuperseded: true });
+    expect(all.map((x) => x.frontmatter.id).sort()).toEqual(["0001", "0002"]);
+  });
+
   test("searchFreeText returns empty for a query with no matches", async () => {
     await seedAtom(tmp, { id: "0001", title: "A" });
     const adapter = new MarkdownLedgerAdapter(tmp);

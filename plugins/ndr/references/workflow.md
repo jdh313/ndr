@@ -9,7 +9,7 @@ The shared substrate for both flows. Installed via `bun install -g https://githu
 | Verb | Job |
 | --- | --- |
 | `ndr resolve <ref> [--json]` | Resolve any reference grain (atom-id, label) to current-head brief(s), with drift surfaced when the seed was superseded |
-| `ndr search <query> [--json]` | Free-text search across atom titles + bodies; returns current heads |
+| `ndr search <query> [--include-superseded] [--json]` | Free-text search across atom titles + bodies; returns current heads only — `--include-superseded` opts into history, with superseded results marked |
 | `ndr current [--label] [--json]` | List current heads, optionally filtered by label; the count goes to stderr |
 | `ndr lineage <id> [--json]` | Walk a supersession chain explicitly |
 | `ndr capture [file]` | Write path — single atom draft as JSON, from a file arg or stdin |

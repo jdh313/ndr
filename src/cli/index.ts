@@ -87,6 +87,10 @@ export interface ListOptions {
   readonly json?: boolean;
 }
 
+export interface SearchOptions extends ListOptions {
+  readonly includeSuperseded?: boolean;
+}
+
 export interface CurrentOptions extends ListOptions {
   readonly label?: string;
 }
@@ -157,13 +161,23 @@ export async function run(argv: readonly string[]): Promise<number> {
     .command("search <query>")
     .description("Free-text search across atom title and body.")
     .option("--ledger <path>", "Ledger directory to search (default: .ndr.toml walk-up).")
+    .option("--include-superseded", "Also return superseded atoms, marked as such.", false)
     .option("--verbose", "Expand results to full briefs.", false)
     .option("--json", "Emit structured JSON instead of the human list.", false)
     .action(
-      async (query: string, options: { ledger?: string; verbose: boolean; json: boolean }) => {
+      async (
+        query: string,
+        options: { ledger?: string; includeSuperseded: boolean; verbose: boolean; json: boolean },
+      ) => {
         const ledger = resolveLedger(options.ledger);
         if (ledger === null) return;
-        emit(await searchCommand(query, ledger, { verbose: options.verbose, json: options.json }));
+        emit(
+          await searchCommand(query, ledger, {
+            includeSuperseded: options.includeSuperseded,
+            verbose: options.verbose,
+            json: options.json,
+          }),
+        );
       },
     );
 
@@ -495,10 +509,12 @@ export async function showCommand(
 export async function searchCommand(
   query: string,
   ledgerPath: string,
-  opts: ListOptions = {},
+  opts: SearchOptions = {},
 ): Promise<ResolveResult> {
   const adapter = new MarkdownLedgerAdapter(ledgerPath);
-  const atoms = await adapter.searchFreeText(query);
+  const atoms = await adapter.searchFreeText(query, {
+    includeSuperseded: opts.includeSuperseded ?? false,
+  });
   const sorted = [...atoms].sort((a, b) => a.frontmatter.id.localeCompare(b.frontmatter.id));
   if (opts.json) return jsonResult(await listJson(sorted, adapter));
   if (atoms.length === 0) {
@@ -1316,15 +1332,36 @@ export function formatBrief(
 }
 
 // Compact one-line summary used by the list verbs (search, current, resolve
-// <label>) when neither --verbose nor --full is set.
+// <label>) when neither --verbose nor --full is set. A non-current atom (only
+// `search --include-superseded` returns one) gets a trailing
+// "(superseded by <id>)" marker.
 function formatCompactLine(atom: Atom): string {
   const fm = atom.frontmatter;
-  return `${fm.id}  ${fm.title}  [${fm.labels.join(",")}]`;
+  const marker = fm.status === "current" ? "" : `  (${nonCurrentMarker(atom)})`;
+  return `${fm.id}  ${fm.title}  [${fm.labels.join(",")}]${marker}`;
+}
+
+// Marker text for a non-current atom surfaced by `search --include-superseded`.
+function nonCurrentMarker(atom: Atom): string {
+  const fm = atom.frontmatter;
+  if (fm.superseded_by.length > 0) return `superseded by ${fm.superseded_by.join(", ")}`;
+  return fm.status;
+}
+
+// Warning line prefixed to a non-current atom's brief, in the `⚠ <Label>: ...`
+// shape of resolve's drift line. It names the immediate successor, not the head.
+function nonCurrentWarning(atom: Atom): string {
+  const fm = atom.frontmatter;
+  if (fm.superseded_by.length > 0) {
+    return `⚠ Superseded: ${fm.id} → ${fm.superseded_by.join(", ")}`;
+  }
+  return `⚠ ${fm.status.charAt(0).toUpperCase()}${fm.status.slice(1)}`;
 }
 
 // `full` is the top rung of the verbosity ladder (compact → brief → full) and
 // implies expansion, so it overrides `verbose`: each head renders as a full
-// brief carrying its complete body.
+// brief carrying its complete body. A non-current atom's brief is prefixed with
+// a warning line.
 async function formatAtomList(
   atoms: readonly Atom[],
   verbose: boolean,
@@ -1338,7 +1375,10 @@ async function formatAtomList(
   const blocks: string[] = [];
   for (const atom of atoms) {
     const filename = await adapter.getAtomFilename(asAtomId(atom.frontmatter.id));
-    blocks.push(formatBrief([atom], filename, full));
+    const brief = formatBrief([atom], filename, full);
+    blocks.push(
+      atom.frontmatter.status === "current" ? brief : `${nonCurrentWarning(atom)}\n${brief}`,
+    );
   }
   return blocks.join("\n");
 }

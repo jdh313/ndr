@@ -111,6 +111,10 @@ ndr show 0070 --ledger ./test/fixtures/ledger
 # Free-text search across atom titles + bodies
 ndr search okta
 
+# Search returns current heads only; --include-superseded also returns
+# superseded ones, marked "(superseded by <id>)"
+ndr search okta --include-superseded
+
 # Walk a supersession chain explicitly
 ndr lineage 0070
 
