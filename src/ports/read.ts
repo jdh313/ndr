@@ -4,10 +4,14 @@ export interface CurrentFilter {
   readonly label?: string;
 }
 
+export interface SearchFilter {
+  readonly includeSuperseded?: boolean;
+}
+
 export interface ReadPort {
   getAtom(id: AtomId): Promise<Atom>;
   getRawAtom(id: AtomId): Promise<string>;
   walkLineage(id: AtomId): Promise<Atom[]>;
   listCurrent(filter?: CurrentFilter): Promise<Atom[]>;
-  searchFreeText(query: string): Promise<Atom[]>;
+  searchFreeText(query: string, filter?: SearchFilter): Promise<Atom[]>;
 }

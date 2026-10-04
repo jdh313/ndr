@@ -87,6 +87,10 @@ export interface ListOptions {
   readonly json?: boolean;
 }
 
+export interface SearchOptions extends ListOptions {
+  readonly includeSuperseded?: boolean;
+}
+
 export interface CurrentOptions extends ListOptions {
   readonly label?: string;
 }
@@ -157,13 +161,23 @@ export async function run(argv: readonly string[]): Promise<number> {
     .command("search <query>")
     .description("Free-text search across atom title and body.")
     .option("--ledger <path>", "Ledger directory to search (default: .ndr.toml walk-up).")
+    .option("--include-superseded", "Also return superseded atoms, marked as such.", false)
     .option("--verbose", "Expand results to full briefs.", false)
     .option("--json", "Emit structured JSON instead of the human list.", false)
     .action(
-      async (query: string, options: { ledger?: string; verbose: boolean; json: boolean }) => {
+      async (
+        query: string,
+        options: { ledger?: string; includeSuperseded: boolean; verbose: boolean; json: boolean },
+      ) => {
         const ledger = resolveLedger(options.ledger);
         if (ledger === null) return;
-        emit(await searchCommand(query, ledger, { verbose: options.verbose, json: options.json }));
+        emit(
+          await searchCommand(query, ledger, {
+            includeSuperseded: options.includeSuperseded,
+            verbose: options.verbose,
+            json: options.json,
+          }),
+        );
       },
     );
 
@@ -495,10 +509,12 @@ export async function showCommand(
 export async function searchCommand(
   query: string,
   ledgerPath: string,
-  opts: ListOptions = {},
+  opts: SearchOptions = {},
 ): Promise<ResolveResult> {
   const adapter = new MarkdownLedgerAdapter(ledgerPath);
-  const atoms = await adapter.searchFreeText(query);
+  const atoms = await adapter.searchFreeText(query, {
+    includeSuperseded: opts.includeSuperseded ?? false,
+  });
   const sorted = [...atoms].sort((a, b) => a.frontmatter.id.localeCompare(b.frontmatter.id));
   if (opts.json) return jsonResult(await listJson(sorted, adapter));
   if (atoms.length === 0) {
@@ -1319,7 +1335,15 @@ export function formatBrief(
 // <label>) when neither --verbose nor --full is set.
 function formatCompactLine(atom: Atom): string {
   const fm = atom.frontmatter;
-  return `${fm.id}  ${fm.title}  [${fm.labels.join(",")}]`;
+  const marker = fm.status === "current" ? "" : `  (${supersededLabel(atom)})`;
+  return `${fm.id}  ${fm.title}  [${fm.labels.join(",")}]${marker}`;
+}
+
+// Marker text for a non-current atom surfaced by `search --include-superseded`.
+function supersededLabel(atom: Atom): string {
+  const fm = atom.frontmatter;
+  if (fm.superseded_by.length > 0) return `superseded by ${fm.superseded_by.join(", ")}`;
+  return fm.status;
 }
 
 // `full` is the top rung of the verbosity ladder (compact → brief → full) and
@@ -1338,7 +1362,12 @@ async function formatAtomList(
   const blocks: string[] = [];
   for (const atom of atoms) {
     const filename = await adapter.getAtomFilename(asAtomId(atom.frontmatter.id));
-    blocks.push(formatBrief([atom], filename, full));
+    const brief = formatBrief([atom], filename, full);
+    blocks.push(
+      atom.frontmatter.status === "current"
+        ? brief
+        : `⚠ ${supersededLabel(atom).replace(/^superseded/, "Superseded")}\n${brief}`,
+    );
   }
   return blocks.join("\n");
 }
